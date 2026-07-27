@@ -3,7 +3,7 @@ import platform
 import shutil
 import subprocess
 
-NAME = "Your Name"  # change this
+NAME = "Habtamu Shewamene "  # change this
 
 def get_node_version():
     if shutil.which("node") is None:
