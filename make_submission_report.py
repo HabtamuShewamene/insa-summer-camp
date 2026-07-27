@@ -20,7 +20,7 @@ sections = [
             "git add .",
             "git commit -m \"impliment the script that displays my name the date and installed phyton and node versions\"",
             "git branch -M main",
-            "git remote add origin <repository-url>",
+            "git remote add origin https://github.com/HabtamuShewamene/insa-summer-camp.git",
             "git push -u origin main",
         ],
     ),
