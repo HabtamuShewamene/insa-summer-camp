@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { SessionsModule } from './sessions/sessions.module';
 import { SecurityModule } from './security/security.module';
+import { MailModule } from './mail/mail.module';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 
 @Module({
@@ -22,6 +23,7 @@ import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
     AuthModule,
     SessionsModule,
     SecurityModule,
+    MailModule,
   ],
   providers: [
     {

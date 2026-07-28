@@ -9,6 +9,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { SecurityModule } from '@/security/security.module';
 import { SessionsModule } from '@/sessions/sessions.module';
+import { MailModule } from '@/mail/mail.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { SessionsModule } from '@/sessions/sessions.module';
     }),
     SecurityModule,
     SessionsModule,
+    MailModule,
   ],
   controllers: [AuthController],
   providers: [

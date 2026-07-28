@@ -13,7 +13,7 @@ import { RequestUser } from '@/common/interfaces';
 import { SecurityService } from '@/security/security.service';
 import { SecurityEventType } from '@prisma/client';
 
-@Controller('sessions')
+@Controller('auth/sessions')
 @UseGuards(AuthGuard('jwt'))
 export class SessionsController {
   constructor(
