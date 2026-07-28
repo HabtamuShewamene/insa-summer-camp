@@ -8,133 +8,105 @@ import {
   useCallback,
   ReactNode,
 } from 'react';
-import { api, User, ApiError } from './api';
+import { api, User, setTokens as setApiTokens } from './api';
+import { useRouter, usePathname } from 'next/navigation';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 interface AuthContextType {
   user: User | null;
-  accessToken: string | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  login: (data: any) => Promise<void>;
+  register: (data: any) => Promise<void>;
   logout: () => Promise<void>;
   logoutAll: () => Promise<void>;
   setTokens: (accessToken: string, refreshToken: string) => void;
-  getAccessToken: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-const ACCESS_TOKEN_KEY = 'access_token';
-const REFRESH_TOKEN_KEY = 'refresh_token';
+const queryClient = new QueryClient();
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+  const pathname = usePathname();
 
-  const saveTokens = (access: string, refresh: string) => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, access);
-    localStorage.setItem(REFRESH_TOKEN_KEY, refresh);
-    setAccessToken(access);
-  };
-
-  const clearTokens = () => {
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-    setAccessToken(null);
+  const handleForceLogout = useCallback(() => {
     setUser(null);
-  };
-
-  const refreshAccessToken = useCallback(async (): Promise<string | null> => {
-    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-    if (!refreshToken) return null;
-
-    try {
-      const result = await api.refresh(refreshToken);
-      saveTokens(result.accessToken, result.refreshToken);
-      return result.accessToken;
-    } catch {
-      clearTokens();
-      return null;
+    setApiTokens(null, null);
+    if (!pathname.startsWith('/login') && !pathname.startsWith('/register')) {
+      router.push('/login');
     }
-  }, []);
+  }, [pathname, router]);
 
-  const getAccessToken = useCallback(async (): Promise<string | null> => {
-    if (accessToken) return accessToken;
-    return refreshAccessToken();
-  }, [accessToken, refreshAccessToken]);
+  useEffect(() => {
+    window.addEventListener('force-logout', handleForceLogout);
+    return () => window.removeEventListener('force-logout', handleForceLogout);
+  }, [handleForceLogout]);
 
   const loadUser = useCallback(async () => {
-    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
-    if (!token) {
+    const accessToken = localStorage.getItem('accessToken');
+    if (!accessToken) {
       setIsLoading(false);
       return;
     }
 
-    setAccessToken(token);
-
     try {
-      const userData = await api.getMe(token);
+      const userData = await api.getMe();
       setUser(userData);
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
-        const newToken = await refreshAccessToken();
-        if (newToken) {
-          try {
-            const userData = await api.getMe(newToken);
-            setUser(userData);
-            return;
-          } catch {
-            clearTokens();
-          }
-        }
-      } else {
-        clearTokens();
-      }
+      // Interceptor will handle refresh if needed. If it fails, it triggers force-logout
+      console.error('Failed to load user', error);
     } finally {
       setIsLoading(false);
     }
-  }, [refreshAccessToken]);
+  }, []);
 
   useEffect(() => {
     loadUser();
   }, [loadUser]);
 
-  const login = async (email: string, password: string) => {
-    const result = await api.login(email, password);
-    saveTokens(result.accessToken, result.refreshToken);
+  const login = async (data: any) => {
+    const result = await api.login(data);
+    setApiTokens(result.accessToken, result.refreshToken);
     setUser(result.user);
+    router.push('/dashboard');
   };
 
-  const register = async (name: string, email: string, password: string) => {
-    const result = await api.register(name, email, password);
-    saveTokens(result.accessToken, result.refreshToken);
+  const register = async (data: any) => {
+    const result = await api.register(data);
+    setApiTokens(result.accessToken, result.refreshToken);
     setUser(result.user);
+    router.push('/dashboard');
   };
 
   const logout = async () => {
-    const token = accessToken || localStorage.getItem(ACCESS_TOKEN_KEY);
-    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-    if (token && refreshToken) {
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (refreshToken) {
       try {
-        await api.logout(refreshToken, token);
+        await api.logout(refreshToken);
       } catch {
-        // Continue logout even if API fails
+        // Ignore API failure during logout
       }
     }
-    clearTokens();
+    setApiTokens(null, null);
+    setUser(null);
+    router.push('/login');
   };
 
   const logoutAll = async () => {
-    const token = await getAccessToken();
-    if (token) {
-      await api.logoutAll(token);
+    try {
+      await api.logoutAll();
+    } catch {
+      // Ignore API failure
     }
-    clearTokens();
+    setApiTokens(null, null);
+    setUser(null);
+    router.push('/login');
   };
 
   const setTokens = (access: string, refresh: string) => {
-    saveTokens(access, refresh);
+    setApiTokens(access, refresh);
     loadUser();
   };
 
@@ -142,17 +114,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
-        accessToken,
         isLoading,
         login,
         register,
         logout,
         logoutAll,
         setTokens,
-        getAccessToken,
       }}
     >
-      {children}
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
     </AuthContext.Provider>
   );
 }
