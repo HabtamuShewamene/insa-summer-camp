@@ -3,6 +3,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import {
   LoginStatus,
   SecurityEventType,
+  Prisma,
 } from '@prisma/client';
 
 @Injectable()
@@ -44,7 +45,7 @@ export class SecurityService {
     eventType: SecurityEventType;
     description: string;
     ipAddress?: string;
-    metadata?: Record<string, unknown>;
+    metadata?: any;
   }) {
     this.logger.warn(
       `Security event [${data.eventType}] for user ${data.userId}: ${data.description}`,
@@ -56,7 +57,7 @@ export class SecurityService {
         eventType: data.eventType,
         description: data.description,
         ipAddress: data.ipAddress,
-        metadata: data.metadata ?? undefined,
+        metadata: data.metadata ? (data.metadata as Prisma.InputJsonValue) : undefined,
       },
     });
   }
