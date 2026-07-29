@@ -12,6 +12,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import {
   RegisterDto,
@@ -27,7 +28,6 @@ import { Public } from '@/common/decorators/public.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { RequestUser } from '@/common/interfaces';
 import { GoogleProfile } from './strategies/google.strategy';
-import { Throttle } from '@nestjs/throttler';
 
 @Controller('auth')
 export class AuthController {
@@ -36,12 +36,16 @@ export class AuthController {
     private configService: ConfigService,
   ) {}
 
+  // ─── Registration ─────────────────────────────────────────────────────────────
+
   @Public()
   @Post('register')
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   async register(@Body() dto: RegisterDto, @Req() req: Request) {
     return this.authService.register(dto, req);
   }
+
+  // ─── Login ────────────────────────────────────────────────────────────────────
 
   @Public()
   @Post('login')
@@ -51,6 +55,8 @@ export class AuthController {
     return this.authService.login(dto, req);
   }
 
+  // ─── Token refresh ────────────────────────────────────────────────────────────
+
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
@@ -59,38 +65,36 @@ export class AuthController {
     return this.authService.refresh(dto.refreshToken, req);
   }
 
+  // ─── Logout ───────────────────────────────────────────────────────────────────
+
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(AuthGuard('jwt'))
-  async logout(
-    @Body() dto: LogoutDto,
-    @CurrentUser() user: RequestUser,
-  ) {
+  async logout(@Body() dto: LogoutDto, @CurrentUser() user: RequestUser) {
     return this.authService.logout(dto.refreshToken, user.id, user.sessionId);
   }
 
   @Post('logout-all')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(AuthGuard('jwt'))
   async logoutAll(@CurrentUser() user: RequestUser) {
     return this.authService.logoutAll(user.id, user.sessionId);
   }
 
+  // ─── Profile ──────────────────────────────────────────────────────────────────
+
   @Get('me')
-  @UseGuards(AuthGuard('jwt'))
   async getMe(@CurrentUser() user: RequestUser) {
     return this.authService.getMe(user.id);
   }
 
   @Get('security-dashboard')
-  @UseGuards(AuthGuard('jwt'))
   async getSecurityDashboard(@CurrentUser() user: RequestUser) {
     return this.authService.getSecurityDashboard(user.id, user.sessionId);
   }
 
+  // ─── Password management ──────────────────────────────────────────────────────
+
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(AuthGuard('jwt'))
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   async changePassword(
     @Body() dto: ChangePasswordDto,
@@ -98,14 +102,6 @@ export class AuthController {
     @Req() req: Request,
   ) {
     return this.authService.changePassword(user.id, dto, req);
-  }
-
-  @Public()
-  @Post('check-password-strength')
-  @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: 30, ttl: 60000 } })
-  async checkPasswordStrength(@Body('password') password: string) {
-    return this.authService.checkPasswordStrength(password);
   }
 
   @Public()
@@ -127,33 +123,53 @@ export class AuthController {
   @Public()
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
   async verifyEmail(@Body() dto: VerifyEmailDto) {
     return this.authService.verifyEmail(dto.token);
   }
 
+  // ─── Password strength check ──────────────────────────────────────────────────
+
   @Public()
+  @Post('check-password-strength')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
+  checkPasswordStrength(@Body('password') password: string) {
+    return this.authService.checkPasswordStrength(password ?? '');
+  }
+
+  // ─── Google OAuth ─────────────────────────────────────────────────────────────
+
+  @Public()
+  @SkipThrottle()
   @Get('google')
   @UseGuards(AuthGuard('google'))
-  async googleAuth() {
-    // Redirects to Google
+  googleAuth() {
+    // Passport intercepts this and redirects to Google — handler never runs
   }
 
   @Public()
+  @SkipThrottle()
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   async googleCallback(
     @Req() req: Request & { user: GoogleProfile },
     @Res() res: Response,
   ) {
-    const result = await this.authService.googleLogin(req.user, req);
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+    try {
+      const result = await this.authService.googleLogin(req.user, req);
+      const frontendUrl =
+        this.configService.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
 
-    const params = new URLSearchParams({
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-    });
+      const params = new URLSearchParams({
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      });
 
-    res.redirect(`${frontendUrl}/auth/callback?${params.toString()}`);
+      res.redirect(`${frontendUrl}/auth/callback?${params.toString()}`);
+    } catch (err) {
+      const frontendUrl =
+        this.configService.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
+      res.redirect(`${frontendUrl}/login?error=oauth_failed`);
+    }
   }
 }

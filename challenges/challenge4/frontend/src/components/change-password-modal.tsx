@@ -2,8 +2,7 @@
 
 import { useState } from 'react';
 import { Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
-import { api, ApiError } from '@/lib/api';
-import { useAuth } from '@/lib/auth-context';
+import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,7 +14,6 @@ interface ChangePasswordModalProps {
 }
 
 export function ChangePasswordModal({ open, onClose }: ChangePasswordModalProps) {
-  const { getAccessToken } = useAuth();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [showCurrent, setShowCurrent] = useState(false);
@@ -47,36 +45,26 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordModalProps)
     setLoading(true);
 
     try {
-      const token = await getAccessToken();
-      if (!token) throw new Error('Not authenticated');
-      await api.changePassword(currentPassword, newPassword, token);
+      await api.changePassword({ currentPassword, newPassword });
       setSuccess('Password changed successfully.');
-      setTimeout(() => {
-        handleClose();
-      }, 1500);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to change password');
+      setTimeout(handleClose, 1500);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to change password');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    /* Backdrop */
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) handleClose();
-      }}
+      onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="change-password-title"
     >
       <div className="w-full max-w-md rounded-lg bg-card p-6 shadow-lg">
-        <h2
-          id="change-password-title"
-          className="text-lg font-semibold mb-1"
-        >
+        <h2 id="change-password-title" className="text-lg font-semibold mb-1">
           Change Password
         </h2>
         <p className="text-sm text-muted-foreground mb-6">
@@ -95,7 +83,6 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordModalProps)
             </div>
           )}
 
-          {/* Current password */}
           <div className="space-y-2">
             <Label htmlFor="current-password">Current Password</Label>
             <div className="relative">
@@ -115,16 +102,11 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordModalProps)
                 onClick={() => setShowCurrent((v) => !v)}
                 aria-label={showCurrent ? 'Hide password' : 'Show password'}
               >
-                {showCurrent ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
+                {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
           </div>
 
-          {/* New password */}
           <div className="space-y-2">
             <Label htmlFor="new-password">New Password</Label>
             <div className="relative">
@@ -145,11 +127,7 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordModalProps)
                 onClick={() => setShowNew((v) => !v)}
                 aria-label={showNew ? 'Hide password' : 'Show password'}
               >
-                {showNew ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
+                {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
             <PasswordStrength password={newPassword} />

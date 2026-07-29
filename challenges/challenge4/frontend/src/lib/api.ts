@@ -189,12 +189,12 @@ export const api = {
   },
 
   getSessions: async () => {
-    const res = await apiClient.get<Session[]>('/auth/sessions');
+    const res = await apiClient.get<Session[]>('/sessions');
     return res.data;
   },
 
   revokeSession: async (sessionId: string) => {
-    const res = await apiClient.delete<{ message: string }>(`/auth/sessions/${sessionId}`);
+    const res = await apiClient.delete<{ message: string }>(`/sessions/${sessionId}`);
     return res.data;
   },
 
@@ -223,5 +223,12 @@ export const api = {
     return res.data;
   },
 
-  getGoogleAuthUrl: () => `${API_URL.replace('/api', '')}/api/auth/google`,
+  getGoogleAuthUrl: () => {
+    // API_URL = "http://localhost:3001/api"
+    // We need "http://localhost:3001/api/auth/google"
+    const base = API_URL.endsWith('/api')
+      ? API_URL
+      : API_URL.replace(/\/api.*$/, '/api');
+    return `${base}/auth/google`;
+  },
 };

@@ -71,21 +71,24 @@ export class SecurityService {
       country?: string;
       city?: string;
     },
-  ): Promise<{ suspicious: boolean; riskScore: number; reasons: string[] }> {
+  ): Promise<{
+    suspicious: boolean;
+    riskScore: number;
+    reasons: string[];
+    isFirstLogin: boolean;
+  }> {
     const reasons: string[] = [];
     let riskScore = 0;
 
     const recentLogins = await this.prisma.loginHistory.findMany({
-      where: {
-        userId,
-        status: LoginStatus.SUCCESS,
-      },
+      where: { userId, status: LoginStatus.SUCCESS },
       orderBy: { createdAt: 'desc' },
       take: 10,
     });
 
+    // First-ever login — nothing to compare against, never suspicious
     if (recentLogins.length === 0) {
-      return { suspicious: false, riskScore: 0, reasons: [] };
+      return { suspicious: false, riskScore: 0, reasons: [], isFirstLogin: true };
     }
 
     const lastLogin = recentLogins[0];
@@ -121,9 +124,10 @@ export class SecurityService {
     }
 
     return {
-      suspicious: riskScore >= 40,
+      suspicious: riskScore >= 70,
       riskScore,
       reasons,
+      isFirstLogin: false,
     };
   }
 
