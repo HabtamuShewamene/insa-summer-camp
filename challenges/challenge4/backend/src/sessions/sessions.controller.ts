@@ -3,18 +3,17 @@ import {
   Get,
   Delete,
   Param,
-  UseGuards,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { SessionsService } from './sessions.service';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { RequestUser } from '@/common/interfaces';
 import { SecurityService } from '@/security/security.service';
 import { SecurityEventType } from '@prisma/client';
 
-@Controller('auth/sessions')
-@UseGuards(AuthGuard('jwt'))
+// JwtAuthGuard is applied globally via APP_GUARD in app.module.ts
+// No @UseGuards needed here
+@Controller('sessions')
 export class SessionsController {
   constructor(
     private sessionsService: SessionsService,

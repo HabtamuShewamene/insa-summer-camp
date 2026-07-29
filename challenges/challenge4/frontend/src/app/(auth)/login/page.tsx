@@ -25,6 +25,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isLocked, setIsLocked] = useState(false);
 
   const {
     register,
@@ -37,9 +38,15 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginFormValues) => {
     try {
       setError(null);
+      setIsLocked(false);
       await login(data);
     } catch (err: any) {
-      setError(err.message || 'Failed to login. Please try again.');
+      const msg: string = err.message || 'Failed to login. Please try again.';
+      // 403 = account locked after 3 failed attempts
+      if (msg.toLowerCase().includes('locked') || msg.toLowerCase().includes('too many')) {
+        setIsLocked(true);
+      }
+      setError(msg);
     }
   };
 
@@ -63,8 +70,19 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {error && (
-              <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md flex items-center">
-                {error}
+              <div className={`text-sm p-3 rounded-md flex items-start gap-2 ${
+                isLocked
+                  ? 'bg-orange-500/15 text-orange-700 border border-orange-200'
+                  : 'bg-destructive/15 text-destructive'
+              }`}>
+                {isLocked && (
+                  <svg className="h-4 w-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M12 15v2m0 0v2m0-2h2m-2 0H10m2-6V7a4 4 0 00-8 0v4H3a1 1 0 00-1 1v7a1 1 0 001 1h18a1 1 0 001-1v-7a1 1 0 00-1-1h-1V7a4 4 0 00-8 0z"
+                    />
+                  </svg>
+                )}
+                <span>{error}</span>
               </div>
             )}
             
@@ -123,7 +141,7 @@ export default function LoginPage() {
               )}
             </div>
             
-            <Button type="submit" className="w-full font-medium" disabled={isSubmitting}>
+            <Button type="submit" className="w-full font-medium" disabled={isSubmitting || isLocked}>
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

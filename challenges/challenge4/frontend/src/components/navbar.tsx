@@ -9,8 +9,8 @@ import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/sessions', label: 'Sessions', icon: Monitor },
-  { href: '/security', label: 'Security', icon: Shield },
+  { href: '/sessions',  label: 'Sessions',  icon: Monitor },
+  { href: '/security',  label: 'Security',  icon: Shield },
 ];
 
 export function Navbar() {
@@ -51,12 +51,13 @@ export function Navbar() {
             ))}
           </nav>
         </div>
+
         <div className="flex items-center gap-4">
           <span className="text-sm text-muted-foreground hidden sm:inline">
             {user.name}
           </span>
           <Button variant="outline" size="sm" onClick={handleLogout}>
-            <LogOut className="h-4 w-4" />
+            <LogOut className="h-4 w-4 mr-2" />
             Logout
           </Button>
         </div>

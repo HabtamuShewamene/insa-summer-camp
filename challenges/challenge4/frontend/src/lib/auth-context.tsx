@@ -8,43 +8,36 @@ import {
   useCallback,
   ReactNode,
 } from 'react';
+import { useRouter } from 'next/navigation';
 import { api, User, setTokens as setApiTokens } from './api';
-import { useRouter, usePathname } from 'next/navigation';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+interface LoginData { email: string; password: string }
+interface RegisterData { name: string; email: string; password: string }
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (data: any) => Promise<void>;
-  register: (data: any) => Promise<void>;
+  login: (data: LoginData) => Promise<void>;
+  register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
   logoutAll: () => Promise<void>;
-  setTokens: (accessToken: string, refreshToken: string) => void;
+  /** Stores tokens and fetches the user — awaitable so callers can navigate after */
+  setTokens: (accessToken: string, refreshToken: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-const queryClient = new QueryClient();
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
-  const pathname = usePathname();
 
-  const handleForceLogout = useCallback(() => {
-    setUser(null);
-    setApiTokens(null, null);
-    if (!pathname.startsWith('/login') && !pathname.startsWith('/register')) {
-      router.push('/login');
+  // ── Restore session on mount ───────────────────────────────────────────────
+  const loadUser = useCallback(async (): Promise<void> => {
+    if (typeof window === 'undefined') {
+      setIsLoading(false);
+      return;
     }
-  }, [pathname, router]);
 
-  useEffect(() => {
-    window.addEventListener('force-logout', handleForceLogout);
-    return () => window.removeEventListener('force-logout', handleForceLogout);
-  }, [handleForceLogout]);
-
-  const loadUser = useCallback(async () => {
     const accessToken = localStorage.getItem('accessToken');
     if (!accessToken) {
       setIsLoading(false);
@@ -54,9 +47,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const userData = await api.getMe();
       setUser(userData);
-    } catch (error) {
-      // Interceptor will handle refresh if needed. If it fails, it triggers force-logout
-      console.error('Failed to load user', error);
+    } catch {
+      // Axios interceptor already tried a token refresh.
+      // If that also failed it fired force-logout — clear state here too.
+      setApiTokens(null, null);
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
@@ -66,73 +61,102 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadUser();
   }, [loadUser]);
 
-  const login = async (data: any) => {
+  // ── Force-logout event fired by axios interceptor on unrecoverable 401 ────
+  useEffect(() => {
+    const handler = () => {
+      setUser(null);
+      setApiTokens(null, null);
+    };
+    window.addEventListener('force-logout', handler);
+    return () => window.removeEventListener('force-logout', handler);
+  }, []);
+
+  // ── Auth actions ──────────────────────────────────────────────────────────
+  const login = async (data: LoginData): Promise<void> => {
     const result = await api.login(data);
     setApiTokens(result.accessToken, result.refreshToken);
     setUser(result.user);
-    router.push('/dashboard');
   };
 
-  const register = async (data: any) => {
+  const register = async (data: RegisterData): Promise<void> => {
     const result = await api.register(data);
     setApiTokens(result.accessToken, result.refreshToken);
     setUser(result.user);
-    router.push('/dashboard');
   };
 
-  const logout = async () => {
-    const refreshToken = localStorage.getItem('refreshToken');
+  const logout = async (): Promise<void> => {
+    const refreshToken =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('refreshToken')
+        : null;
     if (refreshToken) {
       try {
         await api.logout(refreshToken);
       } catch {
-        // Ignore API failure during logout
+        // Best-effort — always clear locally regardless
       }
     }
     setApiTokens(null, null);
     setUser(null);
-    router.push('/login');
   };
 
-  const logoutAll = async () => {
+  const logoutAll = async (): Promise<void> => {
     try {
       await api.logoutAll();
     } catch {
-      // Ignore API failure
+      // Best-effort
     }
     setApiTokens(null, null);
     setUser(null);
-    router.push('/login');
   };
 
-  const setTokens = (access: string, refresh: string) => {
+  /**
+   * Store tokens then fetch the user profile.
+   * Returns a Promise so the Google OAuth callback page can await full
+   * hydration before navigating — prevents the user=null flash on /dashboard.
+   */
+  const setTokens = async (
+    access: string,
+    refresh: string,
+  ): Promise<void> => {
     setApiTokens(access, refresh);
-    loadUser();
+    setIsLoading(true);
+    await loadUser();
   };
 
   return (
     <AuthContext.Provider
-      value={{
-        user,
-        isLoading,
-        login,
-        register,
-        logout,
-        logoutAll,
-        setTokens,
-      }}
+      value={{ user, isLoading, login, register, logout, logoutAll, setTokens }}
     >
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
+      {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
   return context;
+}
+
+/**
+ * Convenience hook that adds router-aware redirect on logout.
+ * Use this in components that need to navigate after logout
+ * instead of calling useRouter separately everywhere.
+ */
+export function useAuthWithRedirect() {
+  const auth = useAuth();
+  const router = useRouter();
+
+  const logout = async () => {
+    await auth.logout();
+    router.push('/login');
+  };
+
+  const logoutAll = async () => {
+    await auth.logoutAll();
+    router.push('/login');
+  };
+
+  return { ...auth, logout, logoutAll };
 }

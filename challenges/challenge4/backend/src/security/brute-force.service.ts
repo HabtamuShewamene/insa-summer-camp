@@ -1,37 +1,65 @@
-import {
-  Injectable,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SecurityService } from '@/security/security.service';
 import { SecurityEventType, LoginStatus } from '@prisma/client';
 
-// Progressive delay schedule (attempt count → delay in seconds)
-const PROGRESSIVE_DELAYS: Record<number, number> = {
-  1: 0,
-  2: 1,
-  3: 5,
-  4: 10,
-  5: 30,
-};
-
+/**
+ * Brute-Force Protection Rules
+ * ─────────────────────────────
+ * • 1st and 2nd failed login  → allowed immediately, no delay
+ * • 3rd failed login          → account locked for 15 minutes
+ * • While locked              → every attempt returns 403 with exact unlock time
+ * • Successful login          → counter reset, lock cleared
+ * • After lock expires        → counter reset automatically on next request
+ */
 @Injectable()
 export class BruteForceService {
-  private readonly maxAttempts: number;
-  private readonly lockoutMinutes: number;
+  private readonly maxAttempts: number;   // default: 3
+  private readonly lockoutMs: number;     // default: 15 minutes in ms
 
   constructor(
     private prisma: PrismaService,
     private securityService: SecurityService,
     configService: ConfigService,
   ) {
-    this.maxAttempts = configService.get<number>('MAX_LOGIN_ATTEMPTS') ?? 5;
-    this.lockoutMinutes =
-      configService.get<number>('LOCKOUT_DURATION_MINUTES') ?? 15;
+    this.maxAttempts =
+      configService.get<number>('MAX_LOGIN_ATTEMPTS') ?? 3;
+    this.lockoutMs =
+      (configService.get<number>('LOCKOUT_DURATION_MINUTES') ?? 15) * 60 * 1000;
   }
 
-  async checkAndRecordAttempt(
+  // ── Called BEFORE attempting password verification ────────────────────────
+
+  async assertNotBlocked(email: string, ipAddress: string): Promise<void> {
+    const record = await this.prisma.loginAttempt.findUnique({
+      where: { email_ipAddress: { email, ipAddress } },
+    });
+
+    if (!record?.blockedUntil) return;
+
+    if (record.blockedUntil > new Date()) {
+      // Still locked — tell the user exactly when they can retry
+      const remainingMs = record.blockedUntil.getTime() - Date.now();
+      const remainingMins = Math.ceil(remainingMs / 60_000);
+      const unlockTime = record.blockedUntil.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      throw new ForbiddenException(
+        `Too many failed attempts. Account locked. ` +
+        `Try again in ${remainingMins} minute(s) (at ${unlockTime}).`,
+      );
+    }
+
+    // Lock has expired — clean it up so the user starts fresh
+    await this.resetAttempts(email, ipAddress);
+  }
+
+  // ── Called AFTER password verification (pass success=true on correct pw) ──
+
+  async recordAttempt(
     email: string,
     ipAddress: string,
     success: boolean,
@@ -42,7 +70,8 @@ export class BruteForceService {
       return;
     }
 
-    const attempt = await this.prisma.loginAttempt.upsert({
+    // Upsert — increment counter or create a fresh record
+    const record = await this.prisma.loginAttempt.upsert({
       where: { email_ipAddress: { email, ipAddress } },
       create: {
         email,
@@ -58,15 +87,14 @@ export class BruteForceService {
       },
     });
 
-    const count = attempt.attemptCount;
+    const count = record.attemptCount;
 
     if (count >= this.maxAttempts) {
-      const blockedUntil = new Date(
-        Date.now() + this.lockoutMinutes * 60 * 1000,
-      );
+      // ── Lock the account for 15 minutes ───────────────────────────────────
+      const blockedUntil = new Date(Date.now() + this.lockoutMs);
 
       await this.prisma.loginAttempt.update({
-        where: { id: attempt.id },
+        where: { id: record.id },
         data: { blockedUntil },
       });
 
@@ -74,29 +102,21 @@ export class BruteForceService {
         await this.securityService.createSecurityEvent({
           userId,
           eventType: SecurityEventType.ACCOUNT_LOCKED,
-          description: `Account locked after ${this.maxAttempts} failed login attempts`,
+          description:
+            `Account locked after ${this.maxAttempts} failed login attempts. ` +
+            `Unlocks at ${blockedUntil.toISOString()}`,
           ipAddress,
         });
       }
-    } else {
-      // Apply progressive delay: wait before allowing the next attempt
-      const delaySecs =
-        PROGRESSIVE_DELAYS[count] ??
-        PROGRESSIVE_DELAYS[Object.keys(PROGRESSIVE_DELAYS).length];
-      if (delaySecs > 0) {
-        const nextAllowed = new Date(Date.now() + delaySecs * 1000);
-        await this.prisma.loginAttempt.update({
-          where: { id: attempt.id },
-          data: { blockedUntil: nextAllowed },
-        });
-      }
     }
+    // No progressive delays for attempts 1 and 2 — just record and continue
 
+    // Always log the failed attempt as a security event and in login history
     if (userId) {
       await this.securityService.createSecurityEvent({
         userId,
         eventType: SecurityEventType.FAILED_LOGIN,
-        description: 'Failed login attempt',
+        description: `Failed login attempt (${count}/${this.maxAttempts})`,
         ipAddress,
       });
     }
@@ -111,61 +131,19 @@ export class BruteForceService {
     });
   }
 
-  async isBlocked(email: string, ipAddress: string): Promise<boolean> {
-    const attempt = await this.prisma.loginAttempt.findUnique({
-      where: { email_ipAddress: { email, ipAddress } },
-    });
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
-    if (!attempt?.blockedUntil) return false;
-
-    if (attempt.blockedUntil > new Date()) {
-      return true;
-    }
-
-    await this.resetAttempts(email, ipAddress);
-    return false;
-  }
-
-  async getBlockedUntil(email: string, ipAddress: string): Promise<Date | null> {
-    const attempt = await this.prisma.loginAttempt.findUnique({
-      where: { email_ipAddress: { email, ipAddress } },
-    });
-    return attempt?.blockedUntil ?? null;
-  }
-
-  private async resetAttempts(email: string, ipAddress: string) {
+  private async resetAttempts(email: string, ipAddress: string): Promise<void> {
     await this.prisma.loginAttempt.deleteMany({
       where: { email, ipAddress },
     });
   }
 
-  async assertNotBlocked(email: string, ipAddress: string): Promise<void> {
-    const attempt = await this.prisma.loginAttempt.findUnique({
+  /** Returns the number of failed attempts so far (0 if no record) */
+  async getAttemptCount(email: string, ipAddress: string): Promise<number> {
+    const record = await this.prisma.loginAttempt.findUnique({
       where: { email_ipAddress: { email, ipAddress } },
     });
-
-    if (!attempt) return;
-
-    if (attempt.blockedUntil && attempt.blockedUntil > new Date()) {
-      const remainingSecs = Math.ceil(
-        (attempt.blockedUntil.getTime() - Date.now()) / 1000,
-      );
-
-      if (attempt.attemptCount >= this.maxAttempts) {
-        throw new ForbiddenException(
-          `Too many failed attempts. Account locked for ${Math.ceil(remainingSecs / 60)} minute(s). Try again after ${attempt.blockedUntil.toISOString()}`,
-        );
-      }
-
-      // Progressive delay — short block
-      throw new ForbiddenException(
-        `Too many attempts. Please wait ${remainingSecs} second(s) before trying again`,
-      );
-    }
-
-    // Clean up expired block
-    if (attempt.blockedUntil && attempt.blockedUntil <= new Date()) {
-      await this.resetAttempts(email, ipAddress);
-    }
+    return record?.attemptCount ?? 0;
   }
 }

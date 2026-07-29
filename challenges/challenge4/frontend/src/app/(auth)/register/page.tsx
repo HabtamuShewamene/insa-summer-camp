@@ -73,7 +73,8 @@ export default function RegisterPage() {
   const onSubmit = async (data: RegisterFormValues) => {
     try {
       setError(null);
-      await registerUser(data);
+      // Only send the fields the backend expects — strip confirmPassword and terms
+      await registerUser({ name: data.name, email: data.email, password: data.password });
     } catch (err: any) {
       setError(err.message || 'Failed to create account. Please try again.');
     }

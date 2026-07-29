@@ -8,6 +8,7 @@ import { SessionsModule } from './sessions/sessions.module';
 import { SecurityModule } from './security/security.module';
 import { MailModule } from './mail/mail.module';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 @Module({
   imports: [
@@ -30,9 +31,14 @@ import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
       provide: APP_FILTER,
       useClass: GlobalExceptionFilter,
     },
+    // ThrottlerGuard runs first (rate limiting), then JwtAuthGuard (authentication)
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
     },
   ],
 })
