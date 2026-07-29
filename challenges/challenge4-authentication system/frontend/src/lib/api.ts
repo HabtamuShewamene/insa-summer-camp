@@ -1,7 +1,8 @@
-import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError } from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
+// User types
 export interface User {
   id: string;
   name: string;
@@ -9,10 +10,6 @@ export interface User {
   provider: string;
   emailVerified: boolean;
   createdAt?: string;
-  // Extended fields returned by GET /api/auth/me
-  // If backend doesn't return these yet they will be undefined
-  loginCount?: number;
-  lastLogin?: string;
 }
 
 export interface AuthResponse {
@@ -25,63 +22,24 @@ export interface Session {
   id: string;
   device: string;
   browser: string;
-  os?: string;
   ipAddress: string;
   location?: string;
   createdAt: string;
   lastActive: string;
-  expiresAt: string;
   isCurrent?: boolean;
 }
 
-export interface LoginHistoryEntry {
-  id: string;
-  ipAddress: string;
-  device: string;
-  browser: string;
-  location?: string;
-  country?: string;
-  city?: string;
-  status: string;
-  riskScore: number;
-  createdAt: string;
-}
-
-export interface SecurityEvent {
-  id: string;
-  eventType: string;
-  description: string;
-  ipAddress?: string;
-  createdAt: string;
-}
-
-export interface SecurityDashboard {
-  sessions: Session[];
-  loginHistory: LoginHistoryEntry[];
-  securityEvents: SecurityEvent[];
-}
-
-export interface PasswordStrengthResult {
-  score: number;
-  label: string;
-  feedback: string[];
-  checks: {
-    length: boolean;
-    uppercase: boolean;
-    lowercase: boolean;
-    number: boolean;
-    special: boolean;
-  };
-}
-
-// Global storage for tokens to be used in interceptors
-let currentAccessToken: string | null = null;
-let currentRefreshToken: string | null = null;
+// Simple token management
+let tokens = {
+  accessToken: null as string | null,
+  refreshToken: null as string | null
+};
 
 export const setTokens = (accessToken: string | null, refreshToken: string | null) => {
-  currentAccessToken = accessToken;
-  currentRefreshToken = refreshToken;
+  tokens.accessToken = accessToken;
+  tokens.refreshToken = refreshToken;
   
+  // Store in localStorage for persistence
   if (typeof window !== 'undefined') {
     if (accessToken) localStorage.setItem('accessToken', accessToken);
     else localStorage.removeItem('accessToken');
@@ -92,14 +50,15 @@ export const setTokens = (accessToken: string | null, refreshToken: string | nul
 };
 
 export const getTokens = () => {
-  if (!currentAccessToken && typeof window !== 'undefined') {
-    currentAccessToken = localStorage.getItem('accessToken');
-    currentRefreshToken = localStorage.getItem('refreshToken');
+  // Load from localStorage on first access
+  if (!tokens.accessToken && typeof window !== 'undefined') {
+    tokens.accessToken = localStorage.getItem('accessToken');
+    tokens.refreshToken = localStorage.getItem('refreshToken');
   }
-  return { accessToken: currentAccessToken, refreshToken: currentRefreshToken };
+  return tokens;
 };
 
-// Create Axios Instance
+// Main API client
 export const apiClient = axios.create({
   baseURL: API_URL,
   headers: {
@@ -107,132 +66,96 @@ export const apiClient = axios.create({
   },
 });
 
-// Request Interceptor: Attach Access Token
-apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+// Add auth header to requests
+apiClient.interceptors.request.use((config) => {
   const { accessToken } = getTokens();
-  if (accessToken && config.headers) {
+  if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`;
   }
   return config;
-}, (error) => Promise.reject(error));
-
-// Response Interceptor: Handle Token Expiration
-apiClient.interceptors.response.use((response) => response, async (error: AxiosError) => {
-  const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-  
-  // If 401 Unauthorized and we haven't retried yet
-  if (error.response?.status === 401 && !originalRequest._retry) {
-    originalRequest._retry = true;
-    
-    const { refreshToken } = getTokens();
-    if (!refreshToken) {
-      // No refresh token, trigger logout
-      window.dispatchEvent(new Event('force-logout'));
-      return Promise.reject(error);
-    }
-
-    try {
-      // Attempt to refresh token
-      const response = await axios.post<{ accessToken: string; refreshToken: string }>(`${API_URL}/auth/refresh`, {
-        refreshToken,
-      });
-
-      const { accessToken: newAccess, refreshToken: newRefresh } = response.data;
-      setTokens(newAccess, newRefresh);
-
-      // Retry original request with new token
-      if (originalRequest.headers) {
-        originalRequest.headers.Authorization = `Bearer ${newAccess}`;
-      }
-      return apiClient(originalRequest);
-    } catch (refreshError) {
-      // Refresh failed, trigger logout
-      setTokens(null, null);
-      window.dispatchEvent(new Event('force-logout'));
-      return Promise.reject(refreshError);
-    }
-  }
-
-  // Format error message to be consistent
-  const message = error.response?.data 
-    ? (error.response.data as any).message || (error.response.data as any).error
-    : error.message;
-    
-  return Promise.reject(new Error(Array.isArray(message) ? message.join(', ') : message));
 });
 
+// Handle token refresh on 401
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as any;
+    
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      const { refreshToken } = getTokens();
+      if (!refreshToken) {
+        // No refresh token - force logout
+        window.dispatchEvent(new Event('force-logout'));
+        return Promise.reject(error);
+      }
+
+      try {
+        // Try to refresh
+        const response = await axios.post(`${API_URL}/auth/refresh`, {
+          refreshToken,
+        });
+
+        const { accessToken: newAccess, refreshToken: newRefresh } = response.data;
+        setTokens(newAccess, newRefresh);
+
+        // Retry original request
+        originalRequest.headers.Authorization = `Bearer ${newAccess}`;
+        return apiClient(originalRequest);
+      } catch (refreshError) {
+        // Refresh failed - logout
+        setTokens(null, null);
+        window.dispatchEvent(new Event('force-logout'));
+        return Promise.reject(refreshError);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+// API methods
 export const api = {
-  register: async (data: any) => {
-    const res = await apiClient.post<AuthResponse>('/auth/register', data);
+  async register(data: { name: string; email: string; password: string }) {
+    const res = await apiClient.post('/auth/register', data);
     return res.data;
   },
 
-  login: async (data: any) => {
-    const res = await apiClient.post<AuthResponse>('/auth/login', data);
+  async login(data: { email: string; password: string }) {
+    const res = await apiClient.post('/auth/login', data);
     return res.data;
   },
 
-  logout: async (refreshToken: string) => {
-    const res = await apiClient.post<{ message: string }>('/auth/logout', { refreshToken });
+  async logout(refreshToken: string) {
+    const res = await apiClient.post('/auth/logout', { refreshToken });
     return res.data;
   },
 
-  logoutAll: async () => {
-    const res = await apiClient.post<{ message: string }>('/auth/logout-all');
+  async getMe() {
+    const res = await apiClient.get('/auth/me');
     return res.data;
   },
 
-  getMe: async () => {
-    const res = await apiClient.get<User>('/auth/me');
+  async getSessions() {
+    const res = await apiClient.get('/sessions');
     return res.data;
   },
 
-  getSecurityDashboard: async () => {
-    const res = await apiClient.get<SecurityDashboard>('/auth/security-dashboard');
+  async revokeSession(sessionId: string) {
+    const res = await apiClient.delete(`/sessions/${sessionId}`);
     return res.data;
   },
 
-  getSessions: async () => {
-    const res = await apiClient.get<Session[]>('/sessions');
+  async checkPasswordStrength(password: string) {
+    const res = await apiClient.post('/auth/check-password-strength', { password });
     return res.data;
   },
 
-  revokeSession: async (sessionId: string) => {
-    const res = await apiClient.delete<{ message: string }>(`/sessions/${sessionId}`);
+  async changePassword(data: { currentPassword: string; newPassword: string }) {
+    const res = await apiClient.post('/auth/change-password', data);
     return res.data;
   },
 
-  checkPasswordStrength: async (password: string) => {
-    const res = await apiClient.post<PasswordStrengthResult>('/auth/check-password-strength', { password });
-    return res.data;
-  },
-
-  changePassword: async (data: any) => {
-    const res = await apiClient.post<{ message: string }>('/auth/change-password', data);
-    return res.data;
-  },
-
-  forgotPassword: async (email: string) => {
-    const res = await apiClient.post<{ message: string }>('/auth/forgot-password', { email });
-    return res.data;
-  },
-
-  resetPassword: async (data: any) => {
-    const res = await apiClient.post<{ message: string }>('/auth/reset-password', data);
-    return res.data;
-  },
-
-  verifyEmail: async (token: string) => {
-    const res = await apiClient.post<{ message: string }>('/auth/verify-email', { token });
-    return res.data;
-  },
-
-  getGoogleAuthUrl: () => {
-    // API_URL = "http://localhost:3001/api"
-    // We need "http://localhost:3001/api/auth/google"
-    const base = API_URL.endsWith('/api')
-      ? API_URL
-      : API_URL.replace(/\/api.*$/, '/api');
-    return `${base}/auth/google`;
-  },
+  getGoogleAuthUrl: () => `${API_URL}/auth/google`,
 };

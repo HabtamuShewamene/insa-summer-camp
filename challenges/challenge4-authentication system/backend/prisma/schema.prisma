@@ -13,15 +13,12 @@ enum AuthProvider {
 }
 
 enum SecurityEventType {
+  REGISTRATION
   PASSWORD_CHANGED
   NEW_DEVICE_LOGIN
   FAILED_LOGIN
-  SUSPICIOUS_LOGIN
-  ACCOUNT_LOCKED
   SESSION_REVOKED
-  LOGOUT_ALL_DEVICES
   GOOGLE_ACCOUNT_LINKED
-  REGISTRATION
 }
 
 enum LoginStatus {
@@ -41,13 +38,10 @@ model User {
   createdAt     DateTime     @default(now()) @map("created_at")
   updatedAt     DateTime     @updatedAt @map("updated_at")
 
-  sessions              Session[]
-  loginHistory          LoginHistory[]
-  securityEvents        SecurityEvent[]
-  loginAttempts         LoginAttempt[]
-  passwordResetTokens   PasswordResetToken[]
-  emailVerificationTokens EmailVerificationToken[]
-  emailVerificationTokens EmailVerificationToken[]
+  sessions       Session[]
+  loginHistory   LoginHistory[]
+  securityEvents SecurityEvent[]
+  loginAttempts  LoginAttempt[]
 
   @@map("users")
 }
@@ -58,7 +52,6 @@ model Session {
   refreshTokenHash String   @map("refresh_token_hash")
   device           String
   browser          String
-  os               String?
   ipAddress        String   @map("ip_address")
   location         String?
   createdAt        DateTime @default(now()) @map("created_at")
@@ -81,8 +74,6 @@ model LoginHistory {
   device    String
   browser   String
   location  String?
-  country   String?
-  city      String?
   status    LoginStatus
   riskScore Int         @default(0) @map("risk_score")
   createdAt DateTime    @default(now()) @map("created_at")
@@ -98,6 +89,31 @@ model SecurityEvent {
   id          String            @id @default(uuid())
   userId      String            @map("user_id")
   eventType   SecurityEventType @map("event_type")
+  description String
+  ipAddress   String?           @map("ip_address")
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("security_events")
+}
+
+model LoginAttempt {
+  id        String   @id @default(uuid())
+  userId    String?  @map("user_id")
+  email     String
+  ipAddress String   @map("ip_address")
+  success   Boolean
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([email, ipAddress])
+  @@index([createdAt])
+  @@map("login_attempts")
+}
   description String
   ipAddress   String?           @map("ip_address")
   metadata    Json?

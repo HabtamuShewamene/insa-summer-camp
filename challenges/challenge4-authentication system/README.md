@@ -1,18 +1,14 @@
-# Identity & Authentication Platform
+# Authentication System
 
-An enterprise-level identity system with secure authentication, session management, brute-force protection, suspicious login detection, and Google OAuth.
+A secure user authentication system with login/register functionality, session management, and Google OAuth integration.
 
----
+## Tech Stack
 
-## Stack
-
-| Layer      | Technology                                  |
-|------------|---------------------------------------------|
-| Frontend   | Next.js 15 (App Router), TypeScript, Tailwind CSS, shadcn/ui |
-| Backend    | NestJS, TypeScript                          |
-| Database   | PostgreSQL via Prisma ORM                   |
-| Auth       | JWT (short-lived) + Refresh tokens, bcrypt/Argon2, Google OAuth 2.0 |
-| Security   | Redis-backed rate limiting (ThrottlerModule), zxcvbn password scoring |
+- **Frontend:** Next.js 15, TypeScript, Tailwind CSS
+- **Backend:** NestJS, TypeScript  
+- **Database:** PostgreSQL with Prisma
+- **Auth:** JWT tokens, Google OAuth
+- **Security:** Password hashing, rate limiting
 
 ---
 
@@ -48,172 +44,103 @@ challenge4/
             └── auth-context.tsx # Auth state, token refresh
 ```
 
----
+## Getting Started
 
-## Setup
+### What you need:
+- Node.js (latest version)
+- Docker Desktop 
+- Google Cloud account (for OAuth)
 
-### Prerequisites
+### Quick Setup:
 
-- Node.js 20+
-- Docker Desktop (for PostgreSQL)
-- A Google Cloud project with OAuth 2.0 credentials (for Google login)
-
-### 1 — Start the database
-
+1. **Start the database:**
 ```bash
 docker compose up -d
 ```
 
-This starts PostgreSQL on port 5432 with the credentials already configured in `backend/.env`.
+2. **Install stuff:**
+```bash
+# Backend
+cd backend && npm install
 
-### 2 — Configure environment
-
-**Backend** (`backend/.env`) is pre-filled for local development. Only the Google OAuth values need updating:
-
-```env
-GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-GOOGLE_CALLBACK_URL=http://localhost:3001/api/auth/google/callback
+# Frontend  
+cd ../frontend && npm install
 ```
 
-Get credentials from [console.cloud.google.com](https://console.cloud.google.com) → APIs & Services → Credentials → Create OAuth 2.0 Client. Add `http://localhost:3001/api/auth/google/callback` as an authorized redirect URI.
+3. **Environment files:**
 
-**Frontend** — create `frontend/.env.local`:
+Backend `.env` is mostly ready, just add your Google OAuth stuff:
+```env
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-secret
+```
 
+Frontend needs `.env.local`:
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:3001/api
 ```
 
-### 3 — Install dependencies
-
-```bash
-# Backend
-cd backend
-npm install
-
-# Frontend
-cd ../frontend
-npm install
-```
-
-### 4 — Run database migrations
-
+4. **Run migrations:**
 ```bash
 cd backend
-npx prisma migrate dev --name init
+npx prisma migrate dev
 npx prisma generate
 ```
 
-### 5 — Start the servers
-
-**Backend** (terminal 1):
-
+5. **Start everything:**
 ```bash
-cd backend
-npm run start:dev
-# → http://localhost:3001/api
+# Terminal 1 - Backend
+cd backend && npm run start:dev
+
+# Terminal 2 - Frontend  
+cd frontend && npm run dev
 ```
 
-**Frontend** (terminal 2):
+Then go to http://localhost:3000
 
-```bash
-cd frontend
-npm run dev
-# → http://localhost:3000
-```
+## What's Built
 
----
+### Backend API
+- `/api/auth/register` - Sign up
+- `/api/auth/login` - Log in  
+- `/api/auth/me` - Get current user
+- `/api/auth/refresh` - Refresh tokens
+- `/api/auth/logout` - Log out
+- `/api/auth/google` - Google OAuth
+- `/api/sessions` - Session management
 
-## API Endpoints
+### Frontend Pages
+- `/login` - Login page with Google button
+- `/register` - Signup with password strength checker
+- `/dashboard` - User dashboard  
+- `/security` - View login history and active sessions
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/auth/register` | Public | Register with email + password |
-| POST | `/api/auth/login` | Public | Login, returns tokens |
-| POST | `/api/auth/refresh` | Public | Refresh access token |
-| POST | `/api/auth/logout` | JWT | Revoke current session |
-| POST | `/api/auth/logout-all` | JWT | Revoke all other sessions |
-| GET  | `/api/auth/me` | JWT | Get current user |
-| GET  | `/api/auth/security-dashboard` | JWT | Sessions + login history + events |
-| POST | `/api/auth/change-password` | JWT | Change password |
-| POST | `/api/auth/check-password-strength` | Public | Real-time password scoring |
-| GET  | `/api/auth/google` | Public | Initiate Google OAuth |
-| GET  | `/api/auth/google/callback` | Public | Google OAuth callback |
-| GET  | `/api/sessions` | JWT | List active sessions |
-| DELETE | `/api/sessions/:id` | JWT | Revoke a specific session |
+### Features
+- Password strength validation
+- JWT access + refresh tokens
+- Google OAuth integration
+- Session tracking (device, location, etc.)
+- Login attempt rate limiting
+- Basic audit logging
 
----
+## Security Stuff
 
-## Security Features
+The app has some basic security features:
+- Password requirements (8+ chars, mixed case, numbers, symbols)
+- Rate limiting on login attempts  
+- JWT tokens with 15min expiry
+- Session tracking and revocation
+- Password strength scoring (using zxcvbn library)
 
-### Password Policy
-- Minimum 8 characters
-- Must contain uppercase, lowercase, number, and special character
-- Scored by zxcvbn (rejects score < 2 — common/guessable passwords)
-- Live strength meter + requirement checklist on register and change-password forms
+For production you'd want to add more stuff like email verification, password reset, better logging, etc.
 
-### Brute-Force Protection
-Progressive delay on failed login attempts:
+## Notes
 
-| Attempt | Delay |
-|---------|-------|
-| 1st | None |
-| 2nd | 1 second |
-| 3rd | 5 seconds |
-| 4th | 10 seconds |
-| 5th+ | 30 seconds → full 15-minute lockout |
+This was built as a learning project to practice:
+- NestJS backend development
+- Next.js app router
+- Authentication flows
+- Database design with Prisma
+- TypeScript full-stack development
 
-Rate limiting via `@nestjs/throttler`: 10 requests / 60 seconds on login endpoint.
-
-### Token Strategy
-- **Access token**: 15-minute JWT, stored in memory (never localStorage)
-- **Refresh token**: 7-day random 64-byte token stored as SHA-256 hash in the database, sent as part of the response body (frontend stores in localStorage — upgrade to HTTP-only cookie in production)
-- Every JWT validation also checks that the session exists and is not revoked
-
-### Suspicious Login Detection
-Risk score calculated on each login:
-
-| Signal | Score |
-|--------|-------|
-| New device / browser | +40 |
-| Country change | +50 |
-| City change (same country) | +20 |
-
-Score ≥ 40 → `NEW_DEVICE_LOGIN` security event  
-Score ≥ 70 → `SUSPICIOUS_LOGIN` security event
-
-### Session Management
-- Per-session records: device, browser, OS, IP, location, last active, expiry
-- Users can view all active sessions and revoke individual ones
-- Logout-all revokes every session except the current one
-- Automatic expiry checked on every JWT validation
-
-### Audit Log
-Every significant event is recorded in `SecurityEvent`:
-`REGISTRATION`, `FAILED_LOGIN`, `ACCOUNT_LOCKED`, `NEW_DEVICE_LOGIN`, `SUSPICIOUS_LOGIN`, `PASSWORD_CHANGED`, `SESSION_REVOKED`, `LOGOUT_ALL_DEVICES`, `GOOGLE_ACCOUNT_LINKED`
-
----
-
-## Frontend Pages
-
-| Route | Description |
-|-------|-------------|
-| `/login` | Email/password login + Google OAuth button |
-| `/register` | Registration with live password strength meter |
-| `/dashboard` | Overview stats + recent events + change-password button |
-| `/security` | Tabs: Security Alerts / Login History / Active Sessions with revoke |
-| `/sessions` | Full session list with per-session revoke and logout-all |
-
----
-
-## Production Checklist
-
-- [ ] Rotate JWT secrets (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`)
-- [ ] Set `NODE_ENV=production`
-- [ ] Enable HTTPS and set `Secure` + `SameSite=Strict` on cookies
-- [ ] Move refresh token from localStorage to HTTP-only cookie
-- [ ] Add Redis for distributed rate limiting across multiple instances
-- [ ] Integrate a GeoIP service (MaxMind GeoLite2 or ip-api) in `resolveLocation()`
-- [ ] Configure email notifications for suspicious login events
-- [ ] Set up database connection pooling (PgBouncer)
-- [ ] Add monitoring / alerting (Sentry, Datadog, etc.)
+The code tries to follow decent practices but there's definitely room for improvement!

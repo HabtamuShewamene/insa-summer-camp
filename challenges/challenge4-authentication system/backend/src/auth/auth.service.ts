@@ -3,7 +3,6 @@ import {
   ConflictException,
   UnauthorizedException,
   BadRequestException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -14,23 +13,19 @@ import { PasswordService } from './password.service';
 import { SecurityService } from '@/security/security.service';
 import { BruteForceService } from '@/security/brute-force.service';
 import { SessionsService } from '@/sessions/sessions.service';
-import { MailService } from '@/mail/mail.service';
 import {
   RegisterDto,
   LoginDto,
   ChangePasswordDto,
-  ResetPasswordDto,
 } from './dto/auth.dto';
 import { GoogleProfile } from './strategies/google.strategy';
 import { AuthProvider, LoginStatus, SecurityEventType } from '@prisma/client';
 import {
   extractDeviceInfo,
-  resolveLocation,
   hashToken,
   generateRefreshToken,
 } from '@/common/utils/device.util';
 import { Request } from 'express';
-import { AuthResponse, AuthTokens, JwtPayload } from '@/common/interfaces';
 
 @Injectable()
 export class AuthService {
@@ -42,12 +37,12 @@ export class AuthService {
     private securityService: SecurityService,
     private bruteForceService: BruteForceService,
     private sessionsService: SessionsService,
-    private mailService: MailService,
   ) {}
 
-  // ─── Registration ────────────────────────────────────────────────────────────
-
-  async register(dto: RegisterDto, req: Request): Promise<AuthResponse> {
+  // TODO: Add email verification flow
+  // Register new user
+  async register(dto: RegisterDto, req: Request) {
+    // Check if user already exists
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
     });
@@ -56,21 +51,23 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
 
+    // Validate and hash password
     this.passwordService.validatePassword(dto.password);
     const passwordHash = await this.passwordService.hashPassword(dto.password);
 
+    // Create user
     const user = await this.prisma.user.create({
       data: {
         name: dto.name,
         email: dto.email.toLowerCase(),
         passwordHash,
         provider: AuthProvider.LOCAL,
-        emailVerified: false,
+        emailVerified: false, // TODO: implement email verification
       },
     });
 
+    // Log registration event
     const { ipAddress } = extractDeviceInfo(req);
-
     await this.securityService.createSecurityEvent({
       userId: user.id,
       eventType: SecurityEventType.REGISTRATION,
@@ -78,61 +75,33 @@ export class AuthService {
       ipAddress,
     });
 
-    // Send verification email (non-blocking — failure doesn't break registration)
-    this.sendVerificationEmail(user.id, user.email).catch(() => {
-      /* log only, don't fail */
-    });
-
     return this.createSessionAndTokens(user, req);
   }
 
-  private async sendVerificationEmail(
-    userId: string,
-    email: string,
-  ): Promise<void> {
-    const verifyToken = crypto.randomBytes(32).toString('hex');
-    const verifyTokenHash = await hashToken(verifyToken);
-
-    await this.prisma.emailVerificationToken.create({
-      data: {
-        userId,
-        tokenHash: verifyTokenHash,
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 h
-      },
-    });
-
-    await this.mailService.sendEmailVerification(email, verifyToken);
-  }
-
-  // ─── Login ───────────────────────────────────────────────────────────────────
-
-  async login(dto: LoginDto, req: Request): Promise<AuthResponse> {
+  // User login with brute force protection
+  async login(dto: LoginDto, req: Request) {
     const email = dto.email.toLowerCase();
     const { ipAddress } = extractDeviceInfo(req);
 
+    // Check if IP/email is blocked due to too many failed attempts
     await this.bruteForceService.assertNotBlocked(email, ipAddress);
 
     const user = await this.prisma.user.findUnique({ where: { email } });
 
     if (!user || !user.passwordHash) {
-<<<<<<< HEAD
+      // Record failed attempt
       await this.bruteForceService.recordAttempt(email, ipAddress, false);
-=======
-      await this.bruteForceService.checkAndRecordAttempt(
-        email,
-        ipAddress,
-        false,
-      );
->>>>>>> feaf0e97007c8ceb6b2ae0f5f00c426aa042ee43
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    // Verify password
     const valid = await this.passwordService.verifyPassword(
       dto.password,
       user.passwordHash,
     );
 
     if (!valid) {
+      // Record failed attempt with user ID
       await this.bruteForceService.recordAttempt(
         email,
         ipAddress,
@@ -142,6 +111,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    // Record successful login
     await this.bruteForceService.recordAttempt(
       email,
       ipAddress,
@@ -154,10 +124,11 @@ export class AuthService {
 
   // ─── Google OAuth ─────────────────────────────────────────────────────────────
 
-  async googleLogin(
-    profile: GoogleProfile,
-    req: Request,
-  ): Promise<AuthResponse> {
+    return this.createSessionAndTokens(user, req);
+  }
+
+  // Google OAuth login/registration
+  async googleLogin(profile: GoogleProfile, req: Request) {
     let user = await this.prisma.user.findFirst({
       where: {
         OR: [
@@ -168,6 +139,7 @@ export class AuthService {
     });
 
     if (user) {
+      // Link Google account if not already linked
       if (!user.googleId) {
         user = await this.prisma.user.update({
           where: { id: user.id },
@@ -176,15 +148,9 @@ export class AuthService {
             emailVerified: profile.emailVerified || user.emailVerified,
           },
         });
-
-        await this.securityService.createSecurityEvent({
-          userId: user.id,
-          eventType: SecurityEventType.GOOGLE_ACCOUNT_LINKED,
-          description: 'Google account linked to existing user',
-          ipAddress: extractDeviceInfo(req).ipAddress,
-        });
       }
     } else {
+      // Create new user via Google
       user = await this.prisma.user.create({
         data: {
           name: profile.name,
@@ -194,21 +160,13 @@ export class AuthService {
           emailVerified: profile.emailVerified,
         },
       });
-
-      await this.securityService.createSecurityEvent({
-        userId: user.id,
-        eventType: SecurityEventType.REGISTRATION,
-        description: 'Account created via Google OAuth',
-        ipAddress: extractDeviceInfo(req).ipAddress,
-      });
     }
 
     return this.createSessionAndTokens(user, req);
   }
 
-  // ─── Token refresh ────────────────────────────────────────────────────────────
-
-  async refresh(refreshToken: string, _req: Request): Promise<AuthTokens> {
+  // Refresh access token
+  async refresh(refreshToken: string) {
     const tokenHash = await hashToken(refreshToken);
 
     const session = await this.prisma.session.findFirst({
@@ -230,6 +188,7 @@ export class AuthService {
       sessionId: session.id,
     });
 
+    // Update last active time
     await this.prisma.session.update({
       where: { id: session.id },
       data: { lastActive: new Date() },
@@ -238,13 +197,8 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
-  // ─── Logout ───────────────────────────────────────────────────────────────────
-
-  async logout(
-    refreshToken: string | undefined,
-    userId?: string,
-    sessionId?: string,
-  ): Promise<{ message: string }> {
+  // Logout user
+  async logout(refreshToken?: string, userId?: string, sessionId?: string) {
     if (refreshToken) {
       const tokenHash = await hashToken(refreshToken);
       await this.prisma.session.updateMany({
@@ -261,23 +215,7 @@ export class AuthService {
     return { message: 'Logged out successfully' };
   }
 
-  async logoutAll(
-    userId: string,
-    currentSessionId: string,
-  ): Promise<{ message: string }> {
-    await this.sessionsService.revokeAllSessions(userId, currentSessionId);
-
-    await this.securityService.createSecurityEvent({
-      userId,
-      eventType: SecurityEventType.LOGOUT_ALL_DEVICES,
-      description: 'User logged out from all other devices',
-    });
-
-    return { message: 'Logged out from all other devices' };
-  }
-
-  // ─── Profile ──────────────────────────────────────────────────────────────────
-
+  // Get current user info
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -298,23 +236,8 @@ export class AuthService {
     return user;
   }
 
-  async getSecurityDashboard(userId: string, sessionId: string) {
-    const [sessions, loginHistory, securityEvents] = await Promise.all([
-      this.sessionsService.getActiveSessions(userId, sessionId),
-      this.securityService.getLoginHistory(userId),
-      this.securityService.getSecurityEvents(userId),
-    ]);
-
-    return { sessions, loginHistory, securityEvents };
-  }
-
-  // ─── Password management ──────────────────────────────────────────────────────
-
-  async changePassword(
-    userId: string,
-    dto: ChangePasswordDto,
-    req: Request,
-  ): Promise<{ message: string }> {
+  // Change password
+  async changePassword(userId: string, dto: ChangePasswordDto) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {
@@ -322,9 +245,7 @@ export class AuthService {
     }
 
     if (!user.passwordHash) {
-      throw new ForbiddenException(
-        'Cannot change password for OAuth-only accounts',
-      );
+      throw new BadRequestException('Cannot change password for OAuth-only accounts');
     }
 
     const valid = await this.passwordService.verifyPassword(
@@ -337,9 +258,7 @@ export class AuthService {
     }
 
     if (dto.currentPassword === dto.newPassword) {
-      throw new BadRequestException(
-        'New password must be different from current password',
-      );
+      throw new BadRequestException('New password must be different');
     }
 
     this.passwordService.validatePassword(dto.newPassword);
@@ -350,76 +269,70 @@ export class AuthService {
       data: { passwordHash: newHash },
     });
 
-    const { ipAddress } = extractDeviceInfo(req);
-    await this.securityService.createSecurityEvent({
-      userId,
-      eventType: SecurityEventType.PASSWORD_CHANGED,
-      description: 'Password changed successfully',
-      ipAddress,
-    });
-
     return { message: 'Password changed successfully' };
   }
 
-  async forgotPassword(email: string): Promise<{ message: string }> {
-    const user = await this.prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+  // Password strength check
+  async checkPasswordStrength(password: string) {
+    const result = zxcvbn(password);
+    const checks = {
+      length: password.length >= 8,
+      uppercase: /[A-Z]/.test(password),
+      lowercase: /[a-z]/.test(password),
+      number: /[0-9]/.test(password),
+      special: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(password),
+    };
+
+    return {
+      score: result.score,
+      feedback: result.feedback.suggestions,
+      checks,
+    };
+  }
+
+  // Helper methods
+  private generateAccessToken(payload: any) {
+    return this.jwtService.sign(payload, {
+      expiresIn: '15m',
+      secret: this.configService.get('JWT_ACCESS_SECRET'),
     });
+  }
 
-    // Always return success to prevent email enumeration
-    if (!user) {
-      return { message: 'If that email exists, a reset link has been sent.' };
-    }
+  private async createSessionAndTokens(user: any, req: Request) {
+    const deviceInfo = extractDeviceInfo(req);
+    const refreshToken = generateRefreshToken();
+    const tokenHash = await hashToken(refreshToken);
 
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const tokenHash = await hashToken(resetToken);
-
-    await this.prisma.passwordResetToken.create({
+    const session = await this.prisma.session.create({
       data: {
         userId: user.id,
-        tokenHash,
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 min
+        refreshTokenHash: tokenHash,
+        device: deviceInfo.device,
+        browser: deviceInfo.browser,
+        ipAddress: deviceInfo.ipAddress,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
       },
     });
 
-    await this.mailService.sendPasswordResetEmail(user.email, resetToken);
-    return { message: 'If that email exists, a reset link has been sent.' };
-  }
-
-  async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
-    const tokenHash = await hashToken(dto.token);
-
-    const resetToken = await this.prisma.passwordResetToken.findUnique({
-      where: { tokenHash },
-      include: { user: true },
+    const accessToken = this.generateAccessToken({
+      sub: user.id,
+      email: user.email,
+      sessionId: session.id,
     });
 
-    if (!resetToken || resetToken.used || resetToken.expiresAt < new Date()) {
-      throw new BadRequestException('Invalid or expired password reset token');
-    }
-
-    const newHash = await this.passwordService.hashPassword(dto.newPassword);
-
-    await this.prisma.$transaction([
-      this.prisma.user.update({
-        where: { id: resetToken.userId },
-        data: { passwordHash: newHash },
-      }),
-      this.prisma.passwordResetToken.update({
-        where: { id: resetToken.id },
-        data: { used: true },
-      }),
-      // Revoke all sessions after password reset
-      this.prisma.session.updateMany({
-        where: { userId: resetToken.userId },
-        data: { revoked: true },
-      }),
-    ]);
-
-    await this.securityService.createSecurityEvent({
-      userId: resetToken.userId,
-      eventType: SecurityEventType.PASSWORD_CHANGED,
-      description: 'Password reset via email token',
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        provider: user.provider,
+        emailVerified: user.emailVerified,
+      },
+    };
+  }
+}
     });
 
     return { message: 'Password reset successfully. Please log in.' };
