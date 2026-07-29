@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { PublicRoute } from '@/components/protected-route';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
