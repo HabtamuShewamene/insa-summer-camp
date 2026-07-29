@@ -1,8 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { Shield, LayoutDashboard, Monitor, LogOut } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { Shield, LayoutDashboard, Monitor, LogOut, Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -15,12 +16,21 @@ const navItems = [
 
 export function Navbar() {
   const pathname = usePathname();
-  const router = useRouter();
   const { user, logout } = useAuth();
+  const [loggingOut, setLoggingOut] = useState(false);
 
+  // When logout() clears user state, ProtectedRoute in (dashboard)/layout.tsx
+  // detects user=null and redirects to /login automatically.
+  // We don't call router.push here to avoid a double-redirect race.
   const handleLogout = async () => {
-    await logout();
-    router.push('/login');
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await logout();
+      // Navigation is handled by ProtectedRoute detecting user === null
+    } finally {
+      setLoggingOut(false);
+    }
   };
 
   if (!user) return null;
@@ -56,9 +66,18 @@ export function Navbar() {
           <span className="text-sm text-muted-foreground hidden sm:inline">
             {user.name}
           </span>
-          <Button variant="outline" size="sm" onClick={handleLogout}>
-            <LogOut className="h-4 w-4 mr-2" />
-            Logout
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleLogout}
+            disabled={loggingOut}
+          >
+            {loggingOut ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <LogOut className="h-4 w-4 mr-2" />
+            )}
+            {loggingOut ? 'Logging out…' : 'Logout'}
           </Button>
         </div>
       </div>

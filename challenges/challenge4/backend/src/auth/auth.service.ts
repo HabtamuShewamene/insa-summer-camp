@@ -115,7 +115,15 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { email } });
 
     if (!user || !user.passwordHash) {
+<<<<<<< HEAD
       await this.bruteForceService.recordAttempt(email, ipAddress, false);
+=======
+      await this.bruteForceService.checkAndRecordAttempt(
+        email,
+        ipAddress,
+        false,
+      );
+>>>>>>> feaf0e97007c8ceb6b2ae0f5f00c426aa042ee43
       throw new UnauthorizedException('Invalid email or password');
     }
 

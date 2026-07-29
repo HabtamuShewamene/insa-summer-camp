@@ -5,13 +5,19 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Loader2 } from 'lucide-react';
 
+/**
+ * Wraps protected pages.
+ * - While loading: shows spinner
+ * - If no user after loading: redirects to /login
+ * - If user present: renders children
+ */
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!isLoading && !user) {
-      router.push('/login');
+      router.replace('/login');
     }
   }, [isLoading, user, router]);
 
@@ -24,20 +30,26 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
-    // Redirect in flight — show nothing
+    // Redirect in-flight — render nothing to avoid flash
     return null;
   }
 
   return <>{children}</>;
 }
 
+/**
+ * Wraps public-only pages (login, register, forgot-password).
+ * - While loading: shows spinner
+ * - If user is logged in: redirects to /dashboard
+ * - If no user: renders children
+ */
 export function PublicRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!isLoading && user) {
-      router.push('/dashboard');
+      router.replace('/dashboard');
     }
   }, [isLoading, user, router]);
 
@@ -50,7 +62,8 @@ export function PublicRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (user) {
-    return null; // Redirect in flight
+    // Redirect in-flight
+    return null;
   }
 
   return <>{children}</>;
