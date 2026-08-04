@@ -3,9 +3,10 @@ import { CommentsController, CommentActionsController } from './comments.control
 import { CommentsService } from './comments.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { SocketServer } from '../socket/socket.server';
+import { SharingModule } from '../sharing/sharing.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, SharingModule],
   controllers: [CommentsController, CommentActionsController],
   providers: [CommentsService],
   exports: [CommentsService],

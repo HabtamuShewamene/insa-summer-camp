@@ -7,12 +7,12 @@ const TooltipProvider = ({ children }: { children: React.ReactNode }) => <>{chil
 
 const TooltipContext = React.createContext<{ open: boolean; setOpen: (open: boolean) => void } | null>(null);
 
-const Tooltip = ({ children }: { children: React.ReactNode }) => {
+const Tooltip = ({ children, delayDuration: _delayDuration, ...props }: React.PropsWithChildren<React.HTMLAttributes<HTMLSpanElement> & { delayDuration?: number }>) => {
   const [open, setOpen] = React.useState(false);
 
   return (
     <TooltipContext.Provider value={{ open, setOpen }}>
-      <span className="relative inline-flex">{children}</span>
+      <span className="relative inline-flex" {...props}>{children}</span>
     </TooltipContext.Provider>
   );
 };
@@ -69,8 +69,10 @@ const TooltipTrigger = React.forwardRef<HTMLElement, React.HTMLAttributes<HTMLEl
 
 TooltipTrigger.displayName = 'TooltipTrigger';
 
-const TooltipContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, children, ...props }, ref) => {
+const TooltipContent = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement> & { side?: 'top' | 'bottom' | 'left' | 'right'; sideOffset?: number }
+>(({ className, children, side = 'bottom', sideOffset = 4, ...props }, ref) => {
     const context = React.useContext(TooltipContext);
 
     if (!context?.open) {
@@ -82,9 +84,14 @@ const TooltipContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
         ref={ref}
         role="tooltip"
         className={cn(
-          'absolute left-1/2 top-full z-50 mt-2 -translate-x-1/2 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground shadow-sm',
+          side === 'bottom' ? 'absolute left-1/2 top-full mt-2 -translate-x-1/2' : '',
+          side === 'top' ? 'absolute bottom-full left-1/2 mb-2 -translate-x-1/2' : '',
+          side === 'left' ? 'absolute right-full top-1/2 mr-2 -translate-y-1/2' : '',
+          side === 'right' ? 'absolute left-full top-1/2 ml-2 -translate-y-1/2' : '',
+          'z-50 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground shadow-sm',
           className,
         )}
+        style={{ marginTop: side === 'bottom' ? sideOffset : undefined, ...(props.style || {}) }}
         {...props}
       >
         {children}

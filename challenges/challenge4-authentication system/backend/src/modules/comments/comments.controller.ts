@@ -62,7 +62,7 @@ export class CommentsController {
     }
 
     const showResolved = includeResolved === 'true';
-    return this.commentsService.getDocumentComments(documentId, showResolved);
+    return this.commentsService.getDocumentComments(documentId, userId, showResolved);
   }
 }
 
@@ -77,7 +77,7 @@ export class CommentActionsController {
    */
   @Get(':id')
   async getComment(@Param('id') id: string) {
-    return this.commentsService.getCommentById(id);
+    return this.commentsService.getCommentById(id, req.user.id);
   }
 
   /**

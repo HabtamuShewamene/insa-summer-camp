@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SharingService } from '../sharing/services/sharing.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { CreateReplyDto } from './dto/create-reply.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
@@ -18,6 +19,7 @@ export class CommentsService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly sharingService: SharingService,
   ) {}
 
   /**
@@ -35,14 +37,7 @@ export class CommentsService {
     userId: string,
     dto: CreateCommentDto,
   ): Promise<CommentResponse> {
-    // Verify document exists and is not deleted
-    const document = await this.prisma.document.findUnique({
-      where: { id: documentId },
-    });
-
-    if (!document || document.isDeleted) {
-      throw new NotFoundException('Document not found');
-    }
+    await this.sharingService.assertCommenter(documentId, userId);
 
     // Create comment
     const comment = await this.prisma.comment.create({
@@ -94,8 +89,10 @@ export class CommentsService {
    */
   async getDocumentComments(
     documentId: string,
+    userId: string,
     includeResolved: boolean = false,
   ): Promise<CommentListResponse> {
+    await this.sharingService.assertViewer(documentId, userId);
     const whereClause: any = { documentId };
     
     if (!includeResolved) {
@@ -142,7 +139,7 @@ export class CommentsService {
   /**
    * Get a single comment by ID
    */
-  async getCommentById(commentId: string): Promise<CommentResponse> {
+  async getCommentById(commentId: string, userId: string): Promise<CommentResponse> {
     const comment = await this.prisma.comment.findUnique({
       where: { id: commentId },
       include: {
@@ -174,6 +171,8 @@ export class CommentsService {
     if (!comment) {
       throw new NotFoundException('Comment not found');
     }
+
+    await this.sharingService.assertViewer(comment.documentId, userId);
 
     return this.mapCommentToResponse(comment);
   }

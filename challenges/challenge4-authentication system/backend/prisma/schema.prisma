@@ -35,6 +35,13 @@ enum CommentStatus {
   RESOLVED
 }
 
+enum DocumentPermissionLevel {
+  OWNER
+  EDITOR
+  COMMENTER
+  VIEWER
+}
+
 model User {
   id            String       @id @default(uuid())
   name          String
@@ -57,6 +64,8 @@ model User {
   commentReplies CommentReply[]
   commentReactions CommentReaction[]
   documentVersions DocumentVersion[]
+  documentPermissions DocumentPermission[] @relation("DocumentPermissionUser")
+  documentPermissionsCreated DocumentPermission[] @relation("DocumentPermissionCreatedBy")
 
   @@map("users")
 }
@@ -183,6 +192,7 @@ model Document {
   content  DocumentContent?
   comments Comment[]
   versions DocumentVersion[]
+  permissions DocumentPermission[]
 
   @@index([ownerId])
   @@map("documents")
@@ -272,4 +282,24 @@ model DocumentVersion {
   @@index([documentId, createdAt])
   @@index([createdById])
   @@map("document_versions")
+}
+
+model DocumentPermission {
+  id          String                  @id @default(uuid())
+  documentId  String                  @map("document_id")
+  userId      String                  @map("user_id")
+  permission  DocumentPermissionLevel
+  createdAt   DateTime                @default(now()) @map("created_at")
+  updatedAt   DateTime                @updatedAt @map("updated_at")
+  createdById String                  @map("created_by_id")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User     @relation("DocumentPermissionUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User    @relation("DocumentPermissionCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, userId])
+  @@index([documentId])
+  @@index([userId])
+  @@index([permission])
+  @@map("document_permissions")
 }
