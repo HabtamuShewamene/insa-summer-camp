@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
+import { CollaborationProvider } from '@/lib/collaboration-context';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -23,7 +24,11 @@ export default function RootLayout({
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <QueryProvider>
-            <AuthProvider>{children}</AuthProvider>
+            <AuthProvider>
+              <CollaborationProvider>
+                {children}
+              </CollaborationProvider>
+            </AuthProvider>
           </QueryProvider>
         </ThemeProvider>
       </body>

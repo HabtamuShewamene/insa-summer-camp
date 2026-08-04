@@ -9,14 +9,61 @@ import Highlight from '@tiptap/extension-highlight';
 import Placeholder from '@tiptap/extension-placeholder';
 import CharacterCount from '@tiptap/extension-character-count';
 import Typography from '@tiptap/extension-typography';
+import Collaboration from '@tiptap/extension-collaboration';
+import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import { EditorToolbar } from './editor-toolbar';
 import { Document, documentService } from '@/lib/document.service';
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { debounce } from 'lodash';
+import { useDocumentCollaboration } from '@/lib/use-document-collaboration';
+import { useCollaboration } from '@/lib/collaboration-context';
+import { useAuth } from '@/lib/auth-context';
+import { Loader2 } from 'lucide-react';
 
 export function RichTextEditor({ document }: { document: Document }) {
-  const content = document.content?.content || '';
+  const { user } = useAuth();
+  const { status } = useCollaboration();
+  const { ydoc, provider, isSynced, isCollaborating } = useDocumentCollaboration({
+    documentId: document.id,
+    enabled: true,
+    onSynced: () => {
+      console.log('[RichTextEditor] Document synced');
+    },
+    onError: (error) => {
+      console.error('[RichTextEditor] Collaboration error:', error);
+    },
+  });
 
+  // Emit status updates for UI components
+  useEffect(() => {
+    const statusMap = {
+      connecting: 'Connecting...',
+      connected: isSynced ? 'Connected' : 'Syncing...',
+      reconnecting: 'Reconnecting...',
+      disconnected: 'Offline',
+      offline: 'Offline',
+      error: 'Sync Failed',
+    };
+    
+    window.dispatchEvent(
+      new CustomEvent('collab-status', { 
+        detail: statusMap[status] 
+      })
+    );
+  }, [status, isSynced]);
+
+  if (!ydoc || !provider || !user) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return <EditorInstance document={document} provider={provider} ydoc={ydoc} user={user} />;
+}
+
+function EditorInstance({ document, provider, ydoc, user }: any) {
   const debouncedSave = useRef(
     debounce(async (jsonContent: any) => {
       try {
@@ -49,8 +96,18 @@ export function RichTextEditor({ document }: { document: Document }) {
         placeholder: 'Start writing...',
         emptyEditorClass: 'is-editor-empty',
       }),
+      Collaboration.configure({
+        document: ydoc,
+      }),
+      CollaborationCursor.configure({
+        provider: provider.awareness,
+        user: {
+          name: user.name,
+          color: provider.awareness.getLocalState()?.user?.color || '#000000',
+        },
+      }),
     ],
-    content,
+    content: document.content?.content || '',
     autofocus: true,
     editorProps: {
       attributes: {
@@ -66,6 +123,8 @@ export function RichTextEditor({ document }: { document: Document }) {
   useEffect(() => {
     return () => debouncedSave.cancel();
   }, [debouncedSave]);
+
+  if (!editor) return null;
 
   return (
     <div className="flex flex-col h-full relative">

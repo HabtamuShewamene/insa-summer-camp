@@ -8,6 +8,7 @@ import { SessionsModule } from './modules/sessions/sessions.module';
 import { SecurityModule } from './modules/security/security.module';
 import { MailModule } from './modules/mail/mail.module';
 import { DocumentModule } from './modules/document/document.module';
+import { SocketModule } from './modules/socket/socket.module';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
@@ -27,6 +28,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     SecurityModule,
     MailModule,
     DocumentModule,
+    SocketModule,
   ],
   providers: [
     {
