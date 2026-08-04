@@ -21,10 +21,6 @@ interface UseDocumentCollaborationReturn {
   isCollaborating: boolean;
 }
 
-/**
- * Hook for managing real-time collaboration on a specific document.
- * Handles joining/leaving the collaboration room and provides the Yjs document.
- */
 export function useDocumentCollaboration({
   documentId,
   enabled = true,
@@ -33,119 +29,86 @@ export function useDocumentCollaboration({
 }: UseDocumentCollaborationOptions): UseDocumentCollaborationReturn {
   const { socket, isConnected, activeUsers } = useCollaboration();
   const { user } = useAuth();
-  
+
   const [ydoc, setYdoc] = useState<Y.Doc | null>(null);
   const [provider, setProvider] = useState<SocketIOProvider | null>(null);
   const [isSynced, setIsSynced] = useState(false);
-  
+
+  // Keep stable refs so callbacks inside the effect never go stale
   const providerRef = useRef<SocketIOProvider | null>(null);
   const ydocRef = useRef<Y.Doc | null>(null);
+  const onSyncedRef = useRef(onSynced);
+  const onErrorRef = useRef(onError);
+  onSyncedRef.current = onSynced;
+  onErrorRef.current = onError;
 
-  // Generate a consistent color for the user
   const getUserColor = useCallback(() => {
-    if (!user?.id) return '#6B7280'; // gray-500 as fallback
-    
+    if (!user?.id) return '#6B7280';
     const colors = [
-      '#EF4444', // red-500
-      '#F59E0B', // amber-500
-      '#10B981', // emerald-500
-      '#3B82F6', // blue-500
-      '#8B5CF6', // violet-500
-      '#EC4899', // pink-500
-      '#14B8A6', // teal-500
-      '#F97316', // orange-500
+      '#EF4444', '#F59E0B', '#10B981', '#3B82F6',
+      '#8B5CF6', '#EC4899', '#14B8A6', '#F97316',
     ];
-    
-    // Use user ID to consistently pick a color
     const hash = user.id.split('').reduce((acc, char) => {
       return char.charCodeAt(0) + ((acc << 5) - acc);
     }, 0);
-    
     return colors[Math.abs(hash) % colors.length];
   }, [user?.id]);
 
-  // Initialize or cleanup collaboration
   useEffect(() => {
+    // Guard: only initialize when all dependencies are truly ready
     if (!enabled || !socket || !isConnected || !documentId || !user) {
-      // Cleanup if conditions are not met
-      if (providerRef.current) {
-        console.log('[useDocumentCollaboration] Cleaning up provider');
-        providerRef.current.destroy();
-        providerRef.current = null;
-        setProvider(null);
-      }
-      if (ydocRef.current) {
-        ydocRef.current.destroy();
-        ydocRef.current = null;
-        setYdoc(null);
-      }
-      setIsSynced(false);
+      return;
+    }
+
+    // Avoid re-initializing if already set up for this document
+    if (providerRef.current || ydocRef.current) {
       return;
     }
 
     try {
-      console.log('[useDocumentCollaboration] Initializing collaboration for document:', documentId);
-      
-      // Create new Yjs document
       const newYdoc = new Y.Doc();
       ydocRef.current = newYdoc;
-      setYdoc(newYdoc);
 
-      // Create provider to sync with backend
-      const newProvider = new SocketIOProvider(
-        socket,
-        documentId,
-        newYdoc,
-        {
-          name: user.name || 'Anonymous',
-          color: getUserColor(),
-        }
-      );
-      
+      const newProvider = new SocketIOProvider(socket, documentId, newYdoc, {
+        name: user.name || 'Anonymous',
+        color: getUserColor(),
+      });
       providerRef.current = newProvider;
-      setProvider(newProvider);
 
-      // Check sync status
+      // Poll for sync completion — use ref so this closure never re-runs the outer effect
       const checkSync = setInterval(() => {
-        if (newProvider.isSynced && !isSynced) {
+        if (providerRef.current?.isSynced) {
+          clearInterval(checkSync);
           setIsSynced(true);
-          onSynced?.();
+          onSyncedRef.current?.();
         }
-      }, 100);
+      }, 150);
 
-      // Cleanup function
+      // Flush state in a microtask to avoid batched-state issues
+      Promise.resolve().then(() => {
+        setYdoc(newYdoc);
+        setProvider(newProvider);
+      });
+
       return () => {
-        console.log('[useDocumentCollaboration] Cleaning up collaboration');
         clearInterval(checkSync);
-        
-        if (providerRef.current) {
-          providerRef.current.destroy();
-          providerRef.current = null;
-        }
-        
-        if (ydocRef.current) {
-          ydocRef.current.destroy();
-          ydocRef.current = null;
-        }
-        
+        providerRef.current?.destroy();
+        providerRef.current = null;
+        ydocRef.current?.destroy();
+        ydocRef.current = null;
         setProvider(null);
         setYdoc(null);
         setIsSynced(false);
       };
     } catch (error) {
-      console.error('[useDocumentCollaboration] Error initializing collaboration:', error);
-      onError?.(error instanceof Error ? error : new Error('Unknown error'));
-      return;
+      onErrorRef.current?.(error instanceof Error ? error : new Error(String(error)));
     }
-  }, [socket, isConnected, documentId, enabled, user, getUserColor, onSynced, onError, isSynced]);
+    // ⚠️ Intentionally omit onSynced/onError — they are accessed via stable refs.
+    // isSynced is intentionally NOT in the deps to avoid re-initializing on every sync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, isConnected, documentId, enabled, user, getUserColor]);
 
   const isCollaborating = isConnected && isSynced && activeUsers.length > 1;
 
-  return {
-    ydoc,
-    provider,
-    isSynced,
-    activeUsers,
-    isCollaborating,
-  };
+  return { ydoc, provider, isSynced, activeUsers, isCollaborating };
 }
