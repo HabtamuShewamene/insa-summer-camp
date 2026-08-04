@@ -8,6 +8,7 @@ describe('BruteForceService', () => {
   let service: BruteForceService;
   let prisma: jest.Mocked<PrismaService>;
 
+  
   beforeEach(async () => {
     const mockPrisma = {
       loginAttempt: {

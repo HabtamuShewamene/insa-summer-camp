@@ -138,6 +138,9 @@ export class DocumentService {
       data: { isDeleted: true },
     });
 
+    return { message: 'Document moved to trash' };
+  }
+
   async updateContent(userId: string, id: string, dto: UpdateDocumentContentDto) {
     const document = await this.prisma.document.findUnique({ where: { id } });
     if (!document || document.isDeleted) throw new NotFoundException('Document not found');
