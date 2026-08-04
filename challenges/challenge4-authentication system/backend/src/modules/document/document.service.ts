@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException 
 import { PrismaService } from '@/prisma/prisma.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { RenameDocumentDto } from './dto/rename-document.dto';
+import { UpdateDocumentContentDto } from './dto/update-content.dto';
 
 @Injectable()
 export class DocumentService {
@@ -137,6 +138,22 @@ export class DocumentService {
       data: { isDeleted: true },
     });
 
-    return { message: 'Document moved to trash' };
+  async updateContent(userId: string, id: string, dto: UpdateDocumentContentDto) {
+    const document = await this.prisma.document.findUnique({ where: { id } });
+    if (!document || document.isDeleted) throw new NotFoundException('Document not found');
+    if (document.ownerId !== userId) throw new ForbiddenException('You do not have access to this document');
+
+    await this.prisma.$transaction([
+      this.prisma.documentContent.update({
+        where: { documentId: id },
+        data: { content: dto.content },
+      }),
+      this.prisma.document.update({
+        where: { id },
+        data: { updatedAt: new Date() },
+      }),
+    ]);
+
+    return { message: 'Document content saved' };
   }
 }

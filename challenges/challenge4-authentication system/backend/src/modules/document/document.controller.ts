@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req } fro
 import { DocumentService } from './document.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { RenameDocumentDto } from './dto/rename-document.dto';
+import { UpdateDocumentContentDto } from './dto/update-content.dto';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 
 @UseGuards(JwtAuthGuard)
@@ -37,6 +38,11 @@ export class DocumentController {
   @Patch(':id/open')
   open(@Req() req: any, @Param('id') id: string) {
     return this.documentService.open(req.user.id, id);
+  }
+
+  @Patch(':id/content')
+  updateContent(@Req() req: any, @Param('id') id: string, @Body() updateDocumentContentDto: UpdateDocumentContentDto) {
+    return this.documentService.updateContent(req.user.id, id, updateDocumentContentDto);
   }
 
   @Post(':id/duplicate')
