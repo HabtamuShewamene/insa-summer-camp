@@ -57,7 +57,7 @@ export function EditorLayout({ document }: { document: Document }) {
   }, []);
 
   return (
-    <div className="flex h-screen w-full bg-background overflow-hidden">
+    <div className="flex h-full w-full bg-background overflow-hidden">
       {sidebarOpen && (
         <div className="w-64 border-r border-border bg-secondary flex-shrink-0">
           <EditorSidebar />

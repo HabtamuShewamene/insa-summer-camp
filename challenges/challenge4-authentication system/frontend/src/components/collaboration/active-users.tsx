@@ -40,10 +40,10 @@ export function ActiveCollaborators({ onOpenPanel }: ActiveCollaboratorsProps) {
     status: 'online' as UserStatus,
   }));
 
-  // Remove duplicates based on userId
-  const uniqueCollaborators = collaborators.filter(
-    (user, index, self) => index === self.findIndex((u) => u.id === user.id)
-  );
+  // Remove duplicates based on userId — use socketId as tiebreaker for key
+  const uniqueCollaborators = collaborators
+    .filter((user, index, self) => index === self.findIndex((u) => u.id === user.id))
+    .filter((user) => !!user.id); // drop any entry without an id
 
   if (uniqueCollaborators.length === 0) {
     return (
@@ -62,8 +62,8 @@ export function ActiveCollaborators({ onOpenPanel }: ActiveCollaboratorsProps) {
     <TooltipProvider>
       <div className="flex items-center gap-2">
         <div className="flex -space-x-2">
-          {visibleUsers.map((user) => (
-            <Tooltip key={user.socketId} delayDuration={200}>
+          {visibleUsers.map((user, idx) => (
+            <Tooltip key={user.socketId || user.id || `collab-${idx}`} delayDuration={200}>
               <TooltipTrigger asChild>
                 <div className="cursor-pointer transition-transform hover:scale-110 hover:z-10">
                   <CollaboratorAvatar

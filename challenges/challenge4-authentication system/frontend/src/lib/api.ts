@@ -67,11 +67,20 @@ export const setTokens = (accessToken: string | null, refreshToken: string | nul
   
   // Store in localStorage for persistence
   if (typeof window !== 'undefined') {
-    if (accessToken) localStorage.setItem('accessToken', accessToken);
-    else localStorage.removeItem('accessToken');
+    if (accessToken) {
+      localStorage.setItem('accessToken', accessToken);
+      // Also set as cookie for middleware
+      document.cookie = `accessToken=${accessToken}; path=/; max-age=${60 * 15}`; // 15 minutes
+    } else {
+      localStorage.removeItem('accessToken');
+      document.cookie = 'accessToken=; path=/; max-age=0'; // Clear cookie
+    }
     
-    if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
-    else localStorage.removeItem('refreshToken');
+    if (refreshToken) {
+      localStorage.setItem('refreshToken', refreshToken);
+    } else {
+      localStorage.removeItem('refreshToken');
+    }
   }
 };
 

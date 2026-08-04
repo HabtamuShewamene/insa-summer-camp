@@ -19,8 +19,8 @@ export function EditorToolbar({ editor, onAddComment }: EditorToolbarProps) {
   if (!editor) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-1 p-1 border-b border-border bg-background sticky top-0 z-10">
-      <div className="flex items-center gap-1 pr-2 border-r border-border">
+    <div className="flex items-center gap-1 p-1.5 border-b border-border bg-background sticky top-0 z-10 overflow-x-auto no-scrollbar min-h-[44px]">
+      <div className="flex items-center gap-1 pr-2 border-r border-border shrink-0">
         <Button variant="ghost" size="icon" onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()} title="Undo (Ctrl+Z)">
           <Undo className="h-4 w-4" />
         </Button>

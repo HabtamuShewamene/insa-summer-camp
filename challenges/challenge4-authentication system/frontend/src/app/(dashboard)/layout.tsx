@@ -2,13 +2,17 @@
 
 import { ProtectedRoute } from '@/components/protected-route';
 import { DashboardHeader } from '@/components/dashboard/dashboard-header';
+import { usePathname } from 'next/navigation';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isDocumentEditor = pathname?.includes('/documents/');
+
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-muted/20">
+      <div className="flex flex-col min-h-screen bg-background">
         <DashboardHeader />
-        <main className="container mx-auto p-4 md:p-8">
+        <main className={`flex-1 flex flex-col ${!isDocumentEditor ? 'max-w-5xl mx-auto w-full px-4 md:px-0 py-8' : ''}`}>
           {children}
         </main>
       </div>

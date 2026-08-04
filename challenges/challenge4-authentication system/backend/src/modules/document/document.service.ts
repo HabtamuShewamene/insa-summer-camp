@@ -22,7 +22,10 @@ export class DocumentService {
         ownerId: userId,
         content: {
           create: {
-            content: { ops: [{ insert: '\n' }] },
+            content: {
+              type: 'doc',
+              content: [{ type: 'paragraph' }],
+            },
           }
         },
         permissions: {
@@ -163,7 +166,10 @@ export class DocumentService {
         ownerId: userId,
         content: {
           create: {
-            content: document.content?.content || { ops: [{ insert: '\n' }] }
+            content: document.content?.content || {
+              type: 'doc',
+              content: [{ type: 'paragraph' }],
+            },
           }
         },
         permissions: {

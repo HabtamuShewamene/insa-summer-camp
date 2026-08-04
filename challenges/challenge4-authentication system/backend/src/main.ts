@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { CustomSocketIoAdapter } from './socket-io.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -13,9 +14,8 @@ async function bootstrap() {
   // ── Security middleware ────────────────────────────────────────────────────
   app.use(
     helmet({
-      // Allow Google OAuth redirects to work in dev
       crossOriginEmbedderPolicy: false,
-      contentSecurityPolicy: false, // disable in dev; enable with proper directives in prod
+      contentSecurityPolicy: false,
     }),
   );
   app.use(cookieParser());
@@ -30,11 +30,14 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
+  // ── Custom Socket.IO adapter with correct CORS ────────────────────────────
+  app.useWebSocketAdapter(new CustomSocketIoAdapter(app));
+
   // ── Global validation pipe ─────────────────────────────────────────────────
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,            // strip unknown fields
-      forbidNonWhitelisted: true, // reject requests with extra fields
+      whitelist: true,
+      forbidNonWhitelisted: true,
       transform: true,
       transformOptions: { enableImplicitConversion: true },
     }),
@@ -49,6 +52,7 @@ async function bootstrap() {
 
   logger.log(`🚀 Identity API running on http://localhost:${port}/api`);
   logger.log(`🔑 Google OAuth  → http://localhost:${port}/api/auth/google`);
+  logger.log(`🔌 WebSocket     → ws://localhost:${port}/socket.io`);
 }
 
 bootstrap();

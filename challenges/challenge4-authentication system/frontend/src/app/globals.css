@@ -1,59 +1,129 @@
-@import "tailwindcss/base";
-@import "tailwindcss/components";
-@import "tailwindcss/utilities";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 98%;      /* #FAFAFA */
-    --foreground: 0 0% 6.7%;     /* #111111 */
-    --card: 0 0% 100%;           /* #FFFFFF */
-    --card-foreground: 0 0% 6.7%;
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 6.7%;
-    --primary: 0 0% 6.7%;        /* #111111 */
-    --primary-foreground: 0 0% 98%; /* #FAFAFA */
-    --secondary: 0 0% 96.1%;     /* #F5F5F5 */
-    --secondary-foreground: 0 0% 6.7%;
-    --muted: 0 0% 96.1%;         /* #F5F5F5 */
-    --muted-foreground: 0 0% 45%; 
-    --accent: 0 0% 96.1%;        
-    --accent-foreground: 0 0% 6.7%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;        /* #E5E5E5 */
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 6.7%;
+    --popover-foreground: 0 0% 0%;
+    --primary: 0 0% 0%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 0%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 40%;
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 0%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 0 0% 0%;
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 0 0% 3.5%;     /* #090909 */
-    --foreground: 0 0% 100%;     /* #FFFFFF */
-    --card: 0 0% 9.4%;           /* #181818 */
+    --background: 0 0% 4%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 4%;
     --card-foreground: 0 0% 100%;
-    --popover: 0 0% 9.4%;
+    --popover: 0 0% 4%;
     --popover-foreground: 0 0% 100%;
-    --primary: 0 0% 100%;        /* #FFFFFF */
-    --primary-foreground: 0 0% 3.5%;
-    --secondary: 0 0% 16.5%;     /* #2A2A2A */
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 0% 10%;
     --secondary-foreground: 0 0% 100%;
-    --muted: 0 0% 9.4%;          /* #181818 */
+    --muted: 0 0% 10%;
     --muted-foreground: 0 0% 65%;
-    --accent: 0 0% 16.5%;        
+    --accent: 0 0% 10%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 16.5%;        /* #2A2A2A */
-    --input: 0 0% 16.5%;
+    --border: 0 0% 15%;
+    --input: 0 0% 15%;
     --ring: 0 0% 100%;
+  }
+
+  /* Typography Scale */
+  h1 {
+    @apply text-3xl font-bold tracking-tight;
+  }
+
+  h2 {
+    @apply text-2xl font-semibold tracking-tight;
+  }
+
+  h3 {
+    @apply text-xl font-semibold;
+  }
+
+  h4 {
+    @apply text-lg font-semibold;
+  }
+
+  body {
+    @apply text-base font-normal;
+  }
+
+  .text-caption {
+    @apply text-sm text-muted-foreground;
+  }
+
+  .text-button {
+    @apply text-sm font-medium;
   }
 }
 
-@layer base {
-  * {
-    @apply border-border;
+@layer components {
+  /* Consistent Card Styles */
+  .card-base {
+    @apply bg-white border border-gray-200 rounded-lg;
   }
-  body {
-    @apply bg-background text-foreground;
+
+  /* Consistent Button Styles */
+  .btn-primary {
+    @apply bg-black text-white hover:bg-gray-800 transition-colors;
+  }
+
+  .btn-secondary {
+    @apply bg-white border border-gray-200 text-gray-900 hover:bg-gray-50 transition-colors;
+  }
+
+  /* Consistent Spacing */
+  .section-spacing {
+    @apply space-y-8;
+  }
+
+  .card-spacing {
+    @apply p-6;
+  }
+
+  /* Loading Skeleton */
+  .skeleton {
+    @apply animate-pulse bg-gray-200 rounded;
+  }
+}
+
+@layer utilities {
+  /* Consistent Shadow Utilities */
+  .shadow-sm {
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  }
+
+  .shadow-md {
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  }
+
+  .shadow-lg {
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  }
+
+  /* Focus Styles */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black;
   }
 }

@@ -76,12 +76,14 @@ export function DocumentHeader({
           
           <Separator orientation="vertical" className="h-4 mx-2" />
           
-          <div className="flex flex-col justify-center min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm truncate">
+          <div className="flex flex-col justify-center min-w-0 flex-1 ml-2">
+            <div className="flex items-center gap-3 overflow-hidden">
+              <span className="font-semibold text-sm truncate max-w-[200px] sm:max-w-[400px]">
                 {document.title}
               </span>
-              <PermissionBadge permission={userPermission} />
+              <div className="shrink-0">
+                <PermissionBadge permission={userPermission} />
+              </div>
             </div>
             <TypingIndicator typingUsers={typingUsers} />
           </div>

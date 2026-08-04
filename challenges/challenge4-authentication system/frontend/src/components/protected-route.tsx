@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { Loader2 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 /**
  * Wraps protected pages.
@@ -23,8 +23,22 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="flex flex-col min-h-screen bg-background">
+        <header className="h-14 border-b w-full flex items-center px-4 md:px-8">
+          <Skeleton className="h-6 w-32" />
+        </header>
+        <div className="flex-1 max-w-5xl mx-auto w-full p-8 space-y-6">
+          <Skeleton className="h-8 w-48 mb-8" />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Skeleton className="h-24 w-full rounded-xl" />
+            <Skeleton className="h-24 w-full rounded-xl" />
+            <Skeleton className="h-24 w-full rounded-xl" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
+            <Skeleton className="h-[300px] w-full rounded-xl" />
+            <Skeleton className="h-[300px] w-full rounded-xl" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -55,8 +69,8 @@ export function PublicRoute({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+        <Skeleton className="h-[500px] w-full max-w-md rounded-2xl" />
       </div>
     );
   }

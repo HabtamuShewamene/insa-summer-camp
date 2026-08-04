@@ -37,7 +37,7 @@ interface CollaborationContextType {
 
 const CollaborationContext = createContext<CollaborationContextType | undefined>(undefined);
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001';
 
 export function CollaborationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -79,8 +79,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      reconnectionAttempts: 10,
-      autoConnect: true,
+      reconnectionAttempts: 5,
     });
 
     // Connection event handlers

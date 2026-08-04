@@ -10,7 +10,6 @@ import Placeholder from '@tiptap/extension-placeholder';
 import CharacterCount from '@tiptap/extension-character-count';
 import Typography from '@tiptap/extension-typography';
 import Collaboration from '@tiptap/extension-collaboration';
-import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import { EditorToolbar } from './editor-toolbar';
 import { Document, documentService } from '@/lib/document.service';
 import { useEffect, useRef, useState } from 'react';
@@ -20,11 +19,25 @@ import { useCollaboration } from '@/lib/collaboration-context';
 import { usePresenceTracking } from '@/lib/use-presence-tracking';
 import { useAuth } from '@/lib/auth-context';
 import { Loader2 } from 'lucide-react';
-import { CommentPositionData } from '@/lib/comments.service';
 import { useDocumentComments } from '@/lib/use-document-comments';
 import { DocumentSidebar } from './document-sidebar';
 import { ReadOnlyBanner } from '@/components/sharing/ReadOnlyBanner';
 import { PermissionLevel } from '@/lib/sharing.service';
+import { SocketIOProvider } from '@/lib/yjs-socket-provider';
+import * as Y from 'yjs';
+import type { User } from '@/lib/api';
+
+interface EditorInstanceProps {
+  document: Document;
+  provider: SocketIOProvider;
+  ydoc: Y.Doc;
+  user: User;
+  sidebarTab: 'comments' | 'history';
+  onSidebarTabChange: (tab: 'comments' | 'history') => void;
+  userPermission: PermissionLevel;
+}
+
+// ── Outer wrapper — waits for ydoc + provider before rendering editor ────────
 
 export function RichTextEditor({
   document,
@@ -42,16 +55,10 @@ export function RichTextEditor({
   const { ydoc, provider, isSynced } = useDocumentCollaboration({
     documentId: document.id,
     enabled: true,
-    onSynced: () => {
-      console.log('[RichTextEditor] Document synced');
-    },
-    onError: (error) => {
-      console.error('[RichTextEditor] Collaboration error:', error);
-    },
   });
 
   useEffect(() => {
-    const statusMap = {
+    const statusMap: Record<string, string> = {
       connecting: 'Connecting...',
       connected: isSynced ? 'Connected' : 'Syncing...',
       reconnecting: 'Reconnecting...',
@@ -59,15 +66,13 @@ export function RichTextEditor({
       offline: 'Offline',
       error: 'Sync Failed',
     };
-    
     window.dispatchEvent(
-      new CustomEvent('collab-status', { 
-        detail: statusMap[status] 
-      })
+      new CustomEvent('collab-status', { detail: statusMap[status] ?? 'Unknown' })
     );
   }, [status, isSynced]);
 
-  if (!ydoc || !provider || !user) {
+  // Don't render the editor until the ydoc AND the provider awareness are ready
+  if (!ydoc || !provider || !provider.awareness || !user) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -76,87 +81,101 @@ export function RichTextEditor({
   }
 
   return (
-    <EditorInstance 
-      document={document} 
-      provider={provider} 
-      ydoc={ydoc} 
-      user={user} 
-      sidebarTab={sidebarTab} 
-      onSidebarTabChange={onSidebarTabChange} 
+    <EditorInstance
+      document={document}
+      provider={provider}
+      ydoc={ydoc}
+      user={user}
+      sidebarTab={sidebarTab}
+      onSidebarTabChange={onSidebarTabChange}
       userPermission={userPermission}
     />
   );
 }
 
-function EditorInstance({ document, provider, ydoc, user, sidebarTab, onSidebarTabChange, userPermission }: any) {
+// ── Inner editor — only mounts when all dependencies are ready ───────────────
+
+function EditorInstance({
+  document,
+  provider,
+  ydoc,
+  user,
+  sidebarTab,
+  onSidebarTabChange,
+  userPermission,
+}: EditorInstanceProps) {
   const isEditable = userPermission === 'OWNER' || userPermission === 'EDITOR';
 
-  const { activeComments, resolvedComments, createComment, replyToComment, resolveComment, reopenComment, deleteComment, deleteReply } = useDocumentComments(document.id);
-  usePresenceTracking({
-    documentId: document.id,
-    enabled: true,
-  });
+  const {
+    activeComments,
+    resolvedComments,
+    createComment,
+    replyToComment,
+    resolveComment,
+    reopenComment,
+    deleteComment,
+    deleteReply,
+  } = useDocumentComments(document.id);
+
+  usePresenceTracking({ documentId: document.id, enabled: true });
 
   const [selectedText, setSelectedText] = useState<string | null>(null);
   const [selectedRange, setSelectedRange] = useState<{ from: number; to: number } | null>(null);
   const [isCommentDraftOpen, setIsCommentDraftOpen] = useState(false);
 
   const debouncedSave = useRef(
-    debounce(async (jsonContent: any) => {
+    debounce(async (jsonContent: unknown) => {
       if (!isEditable) return;
       try {
         window.dispatchEvent(new CustomEvent('save-status', { detail: 'saving' }));
-        await documentService.updateContent(document.id, jsonContent);
+        await documentService.updateContent(document.id, jsonContent as Record<string, unknown>);
         window.dispatchEvent(new CustomEvent('save-status', { detail: 'saved' }));
-      } catch (error) {
+      } catch {
         window.dispatchEvent(new CustomEvent('save-status', { detail: 'error' }));
       }
     }, 2000)
   ).current;
 
+  const userColor = provider.awareness.getLocalState()?.user?.color ?? '#6366f1';
+
   const editor = useEditor({
     editable: isEditable,
+    immediatelyRender: false,
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
+        // Disable built-in history — Collaboration (Yjs) handles undo/redo
+        history: false,
       }),
       Underline,
-      Link.configure({
-        openOnClick: false,
-        autolink: true,
-      }),
-      TextAlign.configure({
-        types: ['heading', 'paragraph'],
-      }),
+      Link.configure({ openOnClick: false, autolink: true }),
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Highlight,
       Typography,
       CharacterCount,
       Placeholder.configure({
-        placeholder: isEditable ? 'Start writing...' : 'View only mode',
+        placeholder: isEditable ? 'Start writing…' : 'View-only document',
         emptyEditorClass: 'is-editor-empty',
       }),
-      Collaboration.configure({
-        document: ydoc,
-      }),
-      CollaborationCursor.configure({
-        provider: provider.awareness,
-        user: {
-          name: user.name,
-          color: provider.awareness.getLocalState()?.user?.color || '#000000',
-        },
-      }),
+      // Collaboration extension binds Yjs doc to the editor
+      Collaboration.configure({ document: ydoc }),
+      // CollaborationCursor is intentionally omitted — the awareness plugin
+      // it depends on has a race condition during ProseMirror view init that
+      // causes "Cannot read properties of undefined (reading 'doc')".
+      // Presence is tracked separately via SocketIOProvider awareness events.
     ],
-    content: document.content?.content || '',
+    // ⚠️ Never pass `content` when using Collaboration — Yjs owns the content
+    content: undefined,
     autofocus: isEditable,
     editorProps: {
       attributes: {
-        class: 'prose prose-sm sm:prose-base dark:prose-invert focus:outline-none max-w-none min-h-[500px] px-8 py-8',
+        class:
+          'prose prose-sm sm:prose-base dark:prose-invert focus:outline-none max-w-none min-h-[500px] px-8 sm:px-12 md:px-24 py-12 md:py-16',
       },
     },
     onUpdate: ({ editor }) => {
       if (isEditable) {
-        const json = editor.getJSON();
-        debouncedSave(json);
+        debouncedSave(editor.getJSON());
       }
     },
     onSelectionUpdate: ({ editor }) => {
@@ -167,23 +186,17 @@ function EditorInstance({ document, provider, ydoc, user, sidebarTab, onSidebarT
         setIsCommentDraftOpen(false);
         return;
       }
-
       setSelectedText(editor.state.doc.textBetween(from, to, ' '));
       setSelectedRange({ from, to });
     },
   });
 
-  useEffect(() => {
-    return () => debouncedSave.cancel();
-  }, [debouncedSave]);
+  useEffect(() => () => debouncedSave.cancel(), [debouncedSave]);
 
   if (!editor) return null;
 
-  const handleAddComment = async () => {
-    if (!selectedText || !selectedRange) {
-      return;
-    }
-
+  const handleAddComment = () => {
+    if (!selectedText || !selectedRange) return;
     editor.chain().focus().setTextSelection(selectedRange).run();
     setIsCommentDraftOpen(true);
   };
@@ -192,6 +205,7 @@ function EditorInstance({ document, provider, ydoc, user, sidebarTab, onSidebarT
     <div className="flex h-full min-h-0 flex-col">
       <ReadOnlyBanner permission={userPermission} />
       <div className="flex flex-1 min-h-0">
+        {/* Editor area */}
         <div className="flex min-w-0 flex-1 flex-col relative">
           {isEditable && <EditorToolbar editor={editor} onAddComment={handleAddComment} />}
           <div className="flex-1 overflow-y-auto bg-background">
@@ -200,6 +214,8 @@ function EditorInstance({ document, provider, ydoc, user, sidebarTab, onSidebarT
             </div>
           </div>
         </div>
+
+        {/* Right sidebar — comments + history */}
         <div className="hidden w-[380px] shrink-0 xl:block">
           <DocumentSidebar
             documentId={document.id}
@@ -214,29 +230,21 @@ function EditorInstance({ document, provider, ydoc, user, sidebarTab, onSidebarT
             onOpenComposer={() => setIsCommentDraftOpen(true)}
             onCancelComposer={() => setIsCommentDraftOpen(false)}
             onCreateComment={async (content) => {
-              if (!selectedText || !selectedRange) {
-                return;
-              }
-
-              editor.chain().focus().setTextSelection(selectedRange).setHighlight({ color: 'rgba(0, 0, 0, 0.08)' }).run();
+              if (!selectedText || !selectedRange) return;
+              editor
+                .chain()
+                .focus()
+                .setTextSelection(selectedRange)
+                .setHighlight({ color: 'rgba(0,0,0,0.08)' })
+                .run();
               await createComment({ content, selectedText, positionData: selectedRange });
               setIsCommentDraftOpen(false);
             }}
-            onReply={async (commentId, content) => {
-              await replyToComment(commentId, { content });
-            }}
-            onResolve={async (commentId) => {
-              await resolveComment(commentId);
-            }}
-            onReopen={async (commentId) => {
-              await reopenComment(commentId);
-            }}
-            onDelete={async (commentId) => {
-              await deleteComment(commentId);
-            }}
-            onDeleteReply={async (commentId, replyId) => {
-              await deleteReply(commentId, replyId);
-            }}
+            onReply={async (commentId, content) => replyToComment(commentId, { content })}
+            onResolve={async (commentId) => resolveComment(commentId)}
+            onReopen={async (commentId) => reopenComment(commentId)}
+            onDelete={async (commentId) => deleteComment(commentId)}
+            onDeleteReply={async (commentId, replyId) => deleteReply(commentId, replyId)}
           />
         </div>
       </div>
