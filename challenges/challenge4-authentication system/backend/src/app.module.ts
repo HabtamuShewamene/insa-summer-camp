@@ -3,10 +3,11 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
-import { AuthModule } from './auth/auth.module';
-import { SessionsModule } from './sessions/sessions.module';
-import { SecurityModule } from './security/security.module';
-import { MailModule } from './mail/mail.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { SessionsModule } from './modules/sessions/sessions.module';
+import { SecurityModule } from './modules/security/security.module';
+import { MailModule } from './modules/mail/mail.module';
+import { DocumentModule } from './modules/document/document.module';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
@@ -25,6 +26,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     SessionsModule,
     SecurityModule,
     MailModule,
+    DocumentModule,
   ],
   providers: [
     {

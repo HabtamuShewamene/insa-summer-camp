@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { api, PasswordStrengthResult } from '@/lib/api';
+import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,7 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { PasswordStrengthMeter } from '@/components/password-strength';
+import { PasswordStrength } from '@/components/password-strength';
 import { Eye, EyeOff, Loader2, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
@@ -40,7 +40,7 @@ const schema = z
 
 type FormValues = z.infer<typeof schema>;
 
-// Inner component — safe to call useSearchParams() here because it's
+// Inner component â€” safe to call useSearchParams() here because it's
 // wrapped in <Suspense> by the outer default export below.
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
@@ -53,8 +53,7 @@ function ResetPasswordForm() {
     token ? null : 'Invalid or missing reset token. Please request a new link.',
   );
   const [isSuccess, setIsSuccess] = useState(false);
-  const [strengthResult, setStrengthResult] =
-    useState<PasswordStrengthResult | null>(null);
+  
 
   const {
     register,
@@ -65,22 +64,10 @@ function ResetPasswordForm() {
 
   const passwordValue = watch('newPassword');
 
-  useEffect(() => {
-    const id = setTimeout(async () => {
-      if (!passwordValue) { setStrengthResult(null); return; }
-      try {
-        const r = await api.checkPasswordStrength(passwordValue);
-        setStrengthResult(r);
-      } catch { /* silent */ }
-    }, 300);
-    return () => clearTimeout(id);
-  }, [passwordValue]);
-
   const onSubmit = async (data: FormValues) => {
-    if (!token) return;
     try {
       setError(null);
-      await api.resetPassword({ token, newPassword: data.newPassword });
+      await api.resetPassword({ token: token as string, newPassword: data.newPassword });
       setIsSuccess(true);
     } catch (err: unknown) {
       setError(
@@ -145,7 +132,7 @@ function ResetPasswordForm() {
                       href="/forgot-password"
                       className="font-medium underline"
                     >
-                      Request a new link →
+                      Request a new link â†’
                     </Link>
                   </div>
                 )}
@@ -183,10 +170,10 @@ function ResetPasswordForm() {
               </div>
               {errors.newPassword && (
                 <p className="text-xs text-destructive">
-                  {errors.newPassword.message}
+                  {errors.newPassword?.message as string}
                 </p>
               )}
-              <PasswordStrengthMeter result={strengthResult} />
+              <PasswordStrength password={passwordValue} />
             </div>
 
             <div className="space-y-2">
@@ -222,7 +209,7 @@ function ResetPasswordForm() {
               </div>
               {errors.confirmPassword && (
                 <p className="text-xs text-destructive">
-                  {errors.confirmPassword.message}
+                  {errors.confirmPassword?.message as string}
                 </p>
               )}
             </div>
@@ -235,7 +222,7 @@ function ResetPasswordForm() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Resetting…
+                  Resettingâ€¦
                 </>
               ) : (
                 'Reset password'
@@ -257,7 +244,7 @@ function ResetPasswordForm() {
 }
 
 // Suspense is required whenever useSearchParams() is used in a
-// Next.js App Router page — without it the build throws a hard error.
+// Next.js App Router page â€” without it the build throws a hard error.
 export default function ResetPasswordPage() {
   return (
     <Suspense
@@ -271,3 +258,5 @@ export default function ResetPasswordPage() {
     </Suspense>
   );
 }
+
+

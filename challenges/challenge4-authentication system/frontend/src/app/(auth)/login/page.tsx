@@ -140,7 +140,7 @@ function LoginForm() {
                 autoComplete="email"
               />
               {errors.email && (
-                <p className="text-xs text-destructive">{errors.email.message}</p>
+                <p className="text-xs text-destructive">{errors.email?.message as string}</p>
               )}
             </div>
 
@@ -185,7 +185,7 @@ function LoginForm() {
               </div>
               {errors.password && (
                 <p className="text-xs text-destructive">
-                  {errors.password.message}
+                  {errors.email?.message as string}
                 </p>
               )}
             </div>

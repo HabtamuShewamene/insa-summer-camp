@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
@@ -77,7 +77,7 @@ export default function RegisterPage() {
                 placeholder="Enter your name"
               />
               {errors.name && (
-                <p className="text-red-500 text-sm mt-1">{errors.name.message}</p>
+                <p className="text-red-500 text-sm mt-1">{errors.name.message as string}</p>
               )}
             </div>
 
@@ -96,7 +96,7 @@ export default function RegisterPage() {
                 placeholder="your@email.com"
               />
               {errors.email && (
-                <p className="text-red-500 text-sm mt-1">{errors.email.message}</p>
+                <p className="text-red-500 text-sm mt-1">{errors.email.message as string}</p>
               )}
             </div>
 
@@ -125,7 +125,7 @@ export default function RegisterPage() {
                 </button>
               </div>
               {errors.password && (
-                <p className="text-red-500 text-sm mt-1">{errors.password.message}</p>
+                <p className="text-red-500 text-sm mt-1">{errors.password.message as string}</p>
               )}
               {password && <PasswordStrength password={password} />}
             </div>
@@ -139,7 +139,7 @@ export default function RegisterPage() {
                 placeholder="Confirm your password"
               />
               {errors.confirmPassword && (
-                <p className="text-red-500 text-sm mt-1">{errors.confirmPassword.message}</p>
+                <p className="text-red-500 text-sm mt-1">{errors.confirmPassword?.message as string}</p>
               )}
             </div>
 
@@ -162,7 +162,7 @@ export default function RegisterPage() {
               </Label>
             </div>
             {errors.terms && (
-              <p className="text-red-500 text-sm">{errors.terms.message}</p>
+              <p className="text-red-500 text-sm">{errors.terms?.message as string}</p>
             )}
 
             <Button
@@ -207,3 +207,6 @@ export default function RegisterPage() {
     </div>
   );
 }
+
+
+

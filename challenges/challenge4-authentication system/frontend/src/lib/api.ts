@@ -21,15 +21,41 @@ export interface AuthResponse {
 export interface Session {
   id: string;
   device: string;
+  os?: string;
   browser: string;
   ipAddress: string;
   location?: string;
   createdAt: string;
   lastActive: string;
+  expiresAt: string;
   isCurrent?: boolean;
 }
 
-// Simple token management
+export interface SecurityEvent {
+  id: string;
+  eventType: string;
+  description?: string;
+  ipAddress?: string;
+  createdAt: string;
+  metadata?: any;
+}
+
+export interface LoginHistory {
+  id: string;
+  status: string;
+  ipAddress: string;
+  browser?: string;
+  device?: string;
+  location?: string;
+  createdAt: string;
+  riskScore: number;
+}
+
+export interface SecurityDashboard {
+  sessions: Session[];
+  loginHistory: LoginHistory[];
+  securityEvents: SecurityEvent[];
+}
 let tokens = {
   accessToken: null as string | null,
   refreshToken: null as string | null
@@ -132,8 +158,18 @@ export const api = {
     return res.data;
   },
 
+  async logoutAll() {
+    const res = await apiClient.post('/auth/logout-all');
+    return res.data;
+  },
+
   async getMe() {
     const res = await apiClient.get('/auth/me');
+    return res.data;
+  },
+
+  async getSecurityDashboard() {
+    const res = await apiClient.get('/auth/security-dashboard');
     return res.data;
   },
 
@@ -158,4 +194,19 @@ export const api = {
   },
 
   getGoogleAuthUrl: () => `${API_URL}/auth/google`,
+
+  async forgotPassword(email: string) {
+    const res = await apiClient.post('/auth/forgot-password', { email });
+    return res.data;
+  },
+
+  async resetPassword(data: any) {
+    const res = await apiClient.post('/auth/reset-password', data);
+    return res.data;
+  },
+
+  async verifyEmail(token: string) {
+    const res = await apiClient.post('/auth/verify-email', { token });
+    return res.data;
+  },
 };

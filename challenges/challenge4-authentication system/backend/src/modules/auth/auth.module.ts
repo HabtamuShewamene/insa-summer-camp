@@ -7,9 +7,9 @@ import { AuthService } from './auth.service';
 import { PasswordService } from './password.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
-import { SecurityModule } from '@/security/security.module';
-import { SessionsModule } from '@/sessions/sessions.module';
-import { MailModule } from '@/mail/mail.module';
+import { SecurityModule } from '@/modules/security/security.module';
+import { SessionsModule } from '@/modules/sessions/sessions.module';
+import { MailModule } from '@/modules/mail/mail.module';
 
 @Module({
   imports: [

@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
-import { SecurityModule } from '@/security/security.module';
+import { SecurityModule } from '@/modules/security/security.module';
 
 @Module({
   imports: [SecurityModule],

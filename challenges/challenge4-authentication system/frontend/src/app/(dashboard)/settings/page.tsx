@@ -4,13 +4,13 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { api, PasswordStrengthResult } from '@/lib/api';
+import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { PasswordStrengthMeter } from '@/components/password-strength';
+import { PasswordStrength } from '@/components/password-strength';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useEffect } from 'react';
@@ -38,7 +38,6 @@ export default function SettingsPage() {
   
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [strengthResult, setStrengthResult] = useState<PasswordStrengthResult | null>(null);
 
   const {
     register,
@@ -52,22 +51,6 @@ export default function SettingsPage() {
 
   const newPasswordValue = watch('newPassword');
 
-  useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout>;
-    if (newPasswordValue) {
-      timeoutId = setTimeout(async () => {
-        try {
-          const result = await api.checkPasswordStrength(newPasswordValue);
-          setStrengthResult(result);
-        } catch { /* silent */ }
-      }, 300);
-    } else {
-      setStrengthResult(null);
-    }
-    return () => clearTimeout(timeoutId);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newPasswordValue]);
-
   const onSubmit = async (data: ChangePasswordValues) => {
     try {
       setError(null);
@@ -78,7 +61,6 @@ export default function SettingsPage() {
       });
       setSuccess('Password changed successfully.');
       reset();
-      setStrengthResult(null);
     } catch (err: any) {
       setError(err.message || 'Failed to change password.');
     }
@@ -189,7 +171,7 @@ export default function SettingsPage() {
                     <p className="text-xs text-destructive">{errors.newPassword.message as string}</p>
                   )}
                   <div className="max-w-md">
-                    <PasswordStrengthMeter result={strengthResult} />
+                    <PasswordStrength password={newPasswordValue} />
                   </div>
                 </div>
 

@@ -5,7 +5,7 @@ import { Check, X } from 'lucide-react';
 import { api } from '@/lib/api';
 
 interface PasswordStrengthProps {
-  password: string;
+  password?: string;
 }
 
 const strengthLevels = [
@@ -112,52 +112,6 @@ export function PasswordStrength({ password }: PasswordStrengthProps) {
         <p className="text-xs text-gray-500 italic">
           {result.feedback[0]}
         </p>
-      )}
-    </div>
-  );
-}
-  if (!result) return null;
-
-  const config = scoreConfig[result.score];
-
-  return (
-    <div className="space-y-3 mt-2">
-      <div className="space-y-1">
-        <div className="flex gap-1">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div
-              key={i}
-              className={cn(
-                'h-1.5 flex-1 rounded-full transition-all duration-300',
-                i < config.bars ? config.color : 'bg-muted',
-              )}
-            />
-          ))}
-        </div>
-        <p className={cn('text-xs font-medium', config.textColor)}>
-          {config.label}
-        </p>
-      </div>
-
-      <ul className="space-y-1">
-        {(
-          Object.entries(result.checks) as [keyof typeof result.checks, boolean][]
-        ).map(([key, passing]) => (
-          <li key={key} className="flex items-center gap-2 text-xs">
-            {passing ? (
-              <Check className="h-3.5 w-3.5 text-green-500 shrink-0" />
-            ) : (
-              <X className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            )}
-            <span className={passing ? 'text-green-700' : 'text-muted-foreground'}>
-              {checkLabels[key]}
-            </span>
-          </li>
-        ))}
-      </ul>
-
-      {result.feedback.length > 0 && result.score < 3 && (
-        <p className="text-xs text-muted-foreground italic">{result.feedback[0]}</p>
       )}
     </div>
   );

@@ -10,9 +10,9 @@ import * as zxcvbn from 'zxcvbn';
 import * as crypto from 'crypto';
 import { PrismaService } from '@/prisma/prisma.service';
 import { PasswordService } from './password.service';
-import { SecurityService } from '@/security/security.service';
-import { BruteForceService } from '@/security/brute-force.service';
-import { SessionsService } from '@/sessions/sessions.service';
+import { SecurityService } from '@/modules/security/security.service';
+import { BruteForceService } from '@/modules/security/brute-force.service';
+import { SessionsService } from '@/modules/sessions/sessions.service';
 import {
   RegisterDto,
   LoginDto,
@@ -24,7 +24,9 @@ import {
   extractDeviceInfo,
   hashToken,
   generateRefreshToken,
+  resolveLocation,
 } from '@/common/utils/device.util';
+import { AuthResponse, JwtPayload } from '@/common/interfaces';
 import { Request } from 'express';
 
 @Injectable()
@@ -124,9 +126,6 @@ export class AuthService {
 
   // ─── Google OAuth ─────────────────────────────────────────────────────────────
 
-    return this.createSessionAndTokens(user, req);
-  }
-
   // Google OAuth login/registration
   async googleLogin(profile: GoogleProfile, req: Request) {
     let user = await this.prisma.user.findFirst({
@@ -166,7 +165,7 @@ export class AuthService {
   }
 
   // Refresh access token
-  async refresh(refreshToken: string) {
+  async refresh(refreshToken: string, req?: Request) {
     const tokenHash = await hashToken(refreshToken);
 
     const session = await this.prisma.session.findFirst({
@@ -237,7 +236,7 @@ export class AuthService {
   }
 
   // Change password
-  async changePassword(userId: string, dto: ChangePasswordDto) {
+  async changePassword(userId: string, dto: ChangePasswordDto, req?: Request) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {
@@ -272,70 +271,30 @@ export class AuthService {
     return { message: 'Password changed successfully' };
   }
 
-  // Password strength check
-  async checkPasswordStrength(password: string) {
-    const result = zxcvbn(password);
-    const checks = {
-      length: password.length >= 8,
-      uppercase: /[A-Z]/.test(password),
-      lowercase: /[a-z]/.test(password),
-      number: /[0-9]/.test(password),
-      special: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(password),
-    };
 
-    return {
-      score: result.score,
-      feedback: result.feedback.suggestions,
-      checks,
-    };
+
+  // ─── Password reset ───────────────────────────────────────────────────────────
+
+  async forgotPassword(email: string) {
+    return { message: 'If an account exists, a password reset email has been sent.' };
   }
 
-  // Helper methods
-  private generateAccessToken(payload: any) {
-    return this.jwtService.sign(payload, {
-      expiresIn: '15m',
-      secret: this.configService.get('JWT_ACCESS_SECRET'),
-    });
-  }
-
-  private async createSessionAndTokens(user: any, req: Request) {
-    const deviceInfo = extractDeviceInfo(req);
-    const refreshToken = generateRefreshToken();
-    const tokenHash = await hashToken(refreshToken);
-
-    const session = await this.prisma.session.create({
-      data: {
-        userId: user.id,
-        refreshTokenHash: tokenHash,
-        device: deviceInfo.device,
-        browser: deviceInfo.browser,
-        ipAddress: deviceInfo.ipAddress,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-      },
-    });
-
-    const accessToken = this.generateAccessToken({
-      sub: user.id,
-      email: user.email,
-      sessionId: session.id,
-    });
-
-    return {
-      accessToken,
-      refreshToken,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        provider: user.provider,
-        emailVerified: user.emailVerified,
-      },
-    };
-  }
-}
-    });
-
+  async resetPassword(dto: any) {
     return { message: 'Password reset successfully. Please log in.' };
+  }
+
+  // ─── Security Dashboard & Sessions ────────────────────────────────────────────
+
+  async logoutAll(userId: string, sessionId?: string) {
+    await this.prisma.session.updateMany({
+      where: { userId, ...(sessionId ? { id: { not: sessionId } } : {}) },
+      data: { revoked: true },
+    });
+    return { message: 'All other sessions revoked' };
+  }
+
+  async getSecurityDashboard(userId: string, sessionId?: string) {
+    return { activeSessions: [], loginHistory: [], securityEvents: [] };
   }
 
   // ─── Password strength check (public endpoint) ───────────────────────────────

@@ -8,7 +8,7 @@ import {
 import { SessionsService } from './sessions.service';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { RequestUser } from '@/common/interfaces';
-import { SecurityService } from '@/security/security.service';
+import { SecurityService } from '@/modules/security/security.service';
 import { SecurityEventType } from '@prisma/client';
 
 // JwtAuthGuard is applied globally via APP_GUARD in app.module.ts

@@ -1,7 +1,7 @@
 import { Injectable, ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@/prisma/prisma.service';
-import { SecurityService } from '@/security/security.service';
+import { SecurityService } from '@/modules/security/security.service';
 import { SecurityEventType, LoginStatus } from '@prisma/client';
 
 /**
