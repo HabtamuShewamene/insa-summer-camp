@@ -13,7 +13,7 @@ import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import { EditorToolbar } from './editor-toolbar';
 import { Document, documentService } from '@/lib/document.service';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { debounce } from 'lodash';
 import { useDocumentCollaboration } from '@/lib/use-document-collaboration';
 import { useCollaboration } from '@/lib/collaboration-context';
@@ -23,19 +23,23 @@ import { Loader2 } from 'lucide-react';
 import { CommentPositionData } from '@/lib/comments.service';
 import { useDocumentComments } from '@/lib/use-document-comments';
 import { DocumentSidebar } from './document-sidebar';
+import { ReadOnlyBanner } from '@/components/sharing/ReadOnlyBanner';
+import { PermissionLevel } from '@/lib/sharing.service';
 
 export function RichTextEditor({
   document,
   sidebarTab,
   onSidebarTabChange,
+  userPermission = 'OWNER',
 }: {
   document: Document;
   sidebarTab: 'comments' | 'history';
   onSidebarTabChange: (tab: 'comments' | 'history') => void;
+  userPermission?: PermissionLevel;
 }) {
   const { user } = useAuth();
   const { status } = useCollaboration();
-  const { ydoc, provider, isSynced, isCollaborating } = useDocumentCollaboration({
+  const { ydoc, provider, isSynced } = useDocumentCollaboration({
     documentId: document.id,
     enabled: true,
     onSynced: () => {
@@ -46,7 +50,6 @@ export function RichTextEditor({
     },
   });
 
-  // Emit status updates for UI components
   useEffect(() => {
     const statusMap = {
       connecting: 'Connecting...',
@@ -72,12 +75,23 @@ export function RichTextEditor({
     );
   }
 
-  return <EditorInstance document={document} provider={provider} ydoc={ydoc} user={user} sidebarTab={sidebarTab} onSidebarTabChange={onSidebarTabChange} />;
+  return (
+    <EditorInstance 
+      document={document} 
+      provider={provider} 
+      ydoc={ydoc} 
+      user={user} 
+      sidebarTab={sidebarTab} 
+      onSidebarTabChange={onSidebarTabChange} 
+      userPermission={userPermission}
+    />
+  );
 }
 
-function EditorInstance({ document, provider, ydoc, user, sidebarTab, onSidebarTabChange }: any) {
+function EditorInstance({ document, provider, ydoc, user, sidebarTab, onSidebarTabChange, userPermission }: any) {
+  const isEditable = userPermission === 'OWNER' || userPermission === 'EDITOR';
+
   const { activeComments, resolvedComments, createComment, replyToComment, resolveComment, reopenComment, deleteComment, deleteReply } = useDocumentComments(document.id);
-  // Activity tracking
   usePresenceTracking({
     documentId: document.id,
     enabled: true,
@@ -89,6 +103,7 @@ function EditorInstance({ document, provider, ydoc, user, sidebarTab, onSidebarT
 
   const debouncedSave = useRef(
     debounce(async (jsonContent: any) => {
+      if (!isEditable) return;
       try {
         window.dispatchEvent(new CustomEvent('save-status', { detail: 'saving' }));
         await documentService.updateContent(document.id, jsonContent);
@@ -100,6 +115,7 @@ function EditorInstance({ document, provider, ydoc, user, sidebarTab, onSidebarT
   ).current;
 
   const editor = useEditor({
+    editable: isEditable,
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
@@ -116,7 +132,7 @@ function EditorInstance({ document, provider, ydoc, user, sidebarTab, onSidebarT
       Typography,
       CharacterCount,
       Placeholder.configure({
-        placeholder: 'Start writing...',
+        placeholder: isEditable ? 'Start writing...' : 'View only mode',
         emptyEditorClass: 'is-editor-empty',
       }),
       Collaboration.configure({
@@ -131,15 +147,17 @@ function EditorInstance({ document, provider, ydoc, user, sidebarTab, onSidebarT
       }),
     ],
     content: document.content?.content || '',
-    autofocus: true,
+    autofocus: isEditable,
     editorProps: {
       attributes: {
         class: 'prose prose-sm sm:prose-base dark:prose-invert focus:outline-none max-w-none min-h-[500px] px-8 py-8',
       },
     },
     onUpdate: ({ editor }) => {
-      const json = editor.getJSON();
-      debouncedSave(json);
+      if (isEditable) {
+        const json = editor.getJSON();
+        debouncedSave(json);
+      }
     },
     onSelectionUpdate: ({ editor }) => {
       const { from, to } = editor.state.selection;
@@ -171,53 +189,56 @@ function EditorInstance({ document, provider, ydoc, user, sidebarTab, onSidebarT
   };
 
   return (
-    <div className="flex h-full min-h-0">
-      <div className="flex min-w-0 flex-1 flex-col relative">
-        <EditorToolbar editor={editor} onAddComment={handleAddComment} />
-        <div className="flex-1 overflow-y-auto bg-background">
-          <div className="max-w-4xl mx-auto w-full">
-            <EditorContent editor={editor} />
+    <div className="flex h-full min-h-0 flex-col">
+      <ReadOnlyBanner permission={userPermission} />
+      <div className="flex flex-1 min-h-0">
+        <div className="flex min-w-0 flex-1 flex-col relative">
+          {isEditable && <EditorToolbar editor={editor} onAddComment={handleAddComment} />}
+          <div className="flex-1 overflow-y-auto bg-background">
+            <div className="max-w-4xl mx-auto w-full">
+              <EditorContent editor={editor} />
+            </div>
           </div>
         </div>
-      </div>
-      <div className="hidden w-[380px] shrink-0 xl:block">
-        <DocumentSidebar
-          documentId={document.id}
-          documentTitle={document.title}
-          activeTab={sidebarTab}
-          onTabChange={onSidebarTabChange}
-          activeComments={activeComments}
-          resolvedComments={resolvedComments}
-          selectedText={selectedText}
-          selectedRange={selectedRange}
-          isComposerOpen={isCommentDraftOpen}
-          onOpenComposer={() => setIsCommentDraftOpen(true)}
-          onCancelComposer={() => setIsCommentDraftOpen(false)}
-          onCreateComment={async (content) => {
-            if (!selectedText || !selectedRange) {
-              return;
-            }
+        <div className="hidden w-[380px] shrink-0 xl:block">
+          <DocumentSidebar
+            documentId={document.id}
+            documentTitle={document.title}
+            activeTab={sidebarTab}
+            onTabChange={onSidebarTabChange}
+            activeComments={activeComments}
+            resolvedComments={resolvedComments}
+            selectedText={selectedText}
+            selectedRange={selectedRange}
+            isComposerOpen={isCommentDraftOpen}
+            onOpenComposer={() => setIsCommentDraftOpen(true)}
+            onCancelComposer={() => setIsCommentDraftOpen(false)}
+            onCreateComment={async (content) => {
+              if (!selectedText || !selectedRange) {
+                return;
+              }
 
-            editor.chain().focus().setTextSelection(selectedRange).setHighlight({ color: 'rgba(0, 0, 0, 0.08)' }).run();
-            await createComment({ content, selectedText, positionData: selectedRange });
-            setIsCommentDraftOpen(false);
-          }}
-          onReply={async (commentId, content) => {
-            await replyToComment(commentId, { content });
-          }}
-          onResolve={async (commentId) => {
-            await resolveComment(commentId);
-          }}
-          onReopen={async (commentId) => {
-            await reopenComment(commentId);
-          }}
-          onDelete={async (commentId) => {
-            await deleteComment(commentId);
-          }}
-          onDeleteReply={async (commentId, replyId) => {
-            await deleteReply(commentId, replyId);
-          }}
-        />
+              editor.chain().focus().setTextSelection(selectedRange).setHighlight({ color: 'rgba(0, 0, 0, 0.08)' }).run();
+              await createComment({ content, selectedText, positionData: selectedRange });
+              setIsCommentDraftOpen(false);
+            }}
+            onReply={async (commentId, content) => {
+              await replyToComment(commentId, { content });
+            }}
+            onResolve={async (commentId) => {
+              await resolveComment(commentId);
+            }}
+            onReopen={async (commentId) => {
+              await reopenComment(commentId);
+            }}
+            onDelete={async (commentId) => {
+              await deleteComment(commentId);
+            }}
+            onDeleteReply={async (commentId, replyId) => {
+              await deleteReply(commentId, replyId);
+            }}
+          />
+        </div>
       </div>
     </div>
   );

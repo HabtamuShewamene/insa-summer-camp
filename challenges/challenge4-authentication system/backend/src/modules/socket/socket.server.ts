@@ -114,10 +114,27 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    // TODO: Add more granular permission checks here
-    // For now, we allow access if document exists and isn't deleted
+    // Resolve user permission level
+    let permission: string | null = null;
+    if (doc.ownerId === user.id) {
+      permission = 'OWNER';
+    } else {
+      const permRecord = await this.prisma.documentPermission.findUnique({
+        where: { documentId_userId: { documentId, userId: user.id } },
+      });
+      permission = permRecord?.permission ?? null;
+    }
 
+    if (!permission) {
+      client.emit('error', { message: 'Unauthorized access to document' });
+      return;
+    }
+
+    client.data.permission = permission;
     client.join(documentId);
+    
+    // Emit user permission to client
+    client.emit('permission-info', { permission });
     
     const userColor = color || this.generateUserColor(user.id);
     
@@ -197,6 +214,13 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     const { documentId, update } = data;
     
+    // Block editing if user is VIEWER or COMMENTER
+    const permission = client.data.permission;
+    if (permission === 'VIEWER' || permission === 'COMMENTER') {
+      client.emit('error', { message: 'Read-only access: content updates not allowed' });
+      return;
+    }
+
     // Update activity
     this.presenceService.updateActivity(client.id);
     
@@ -341,6 +365,34 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
   broadcastDocumentRestored(documentId: string, payload: any): void {
     this.server.to(documentId).emit('document-restored', payload);
     this.logger.log(`Document restored broadcast to document ${documentId}`);
+  }
+
+  broadcastDocumentShared(userId: string, payload: any): void {
+    this.server.emit(`user-notification:${userId}`, {
+      type: 'document-shared',
+      message: 'You were given access to a document.',
+      ...payload,
+    });
+    this.logger.log(`Document shared broadcast to user ${userId}`);
+  }
+
+  broadcastPermissionUpdated(documentId: string, payload: any): void {
+    this.server.to(documentId).emit('permission-updated', payload);
+    this.logger.log(`Permission updated broadcast for document ${documentId}`);
+  }
+
+  broadcastPermissionRemoved(documentId: string, payload: any): void {
+    this.server.to(documentId).emit('permission-removed', payload);
+    this.logger.log(`Permission removed broadcast for document ${documentId}`);
+  }
+
+  broadcastDocumentAccessRevoked(userId: string, payload: any): void {
+    this.server.emit(`user-notification:${userId}`, {
+      type: 'access-revoked',
+      message: 'Your access to a document has been revoked.',
+      ...payload,
+    });
+    this.logger.log(`Document access revoked broadcast to user ${userId}`);
   }
 
   broadcastDocumentUpdate(documentId: string, update: number[]): void {

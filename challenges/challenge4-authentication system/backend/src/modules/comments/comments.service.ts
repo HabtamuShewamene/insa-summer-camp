@@ -397,6 +397,8 @@ export class CommentsService {
       throw new NotFoundException('Comment not found');
     }
 
+    await this.sharingService.assertCommenter(comment.documentId, userId);
+
     const reply = await this.prisma.commentReply.create({
       data: {
         commentId,

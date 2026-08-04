@@ -4,12 +4,15 @@ import { CreateDocumentDto } from './dto/create-document.dto';
 import { RenameDocumentDto } from './dto/rename-document.dto';
 import { UpdateDocumentContentDto } from './dto/update-content.dto';
 import { VersionHistoryService } from '../version-history/version-history.service';
+import { SharingService } from '../sharing/services/sharing.service';
+import { DocumentPermissionLevel } from '@prisma/client';
 
 @Injectable()
 export class DocumentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly versionHistoryService: VersionHistoryService,
+    private readonly sharingService: SharingService,
   ) {}
 
   async create(userId: string, dto: CreateDocumentDto) {
@@ -20,6 +23,13 @@ export class DocumentService {
         content: {
           create: {
             content: { ops: [{ insert: '\n' }] },
+          }
+        },
+        permissions: {
+          create: {
+            userId,
+            createdById: userId,
+            permission: DocumentPermissionLevel.OWNER,
           }
         }
       },
@@ -33,9 +43,19 @@ export class DocumentService {
 
   async findAll(userId: string) {
     const documents = await this.prisma.document.findMany({
-      where: { ownerId: userId, isDeleted: false },
+      where: {
+        isDeleted: false,
+        OR: [
+          { ownerId: userId },
+          { permissions: { some: { userId } } },
+        ],
+      },
       include: {
         owner: { select: { id: true, name: true, email: true } },
+        permissions: {
+          where: { userId },
+          select: { permission: true },
+        },
       },
       orderBy: { updatedAt: 'desc' },
     });
@@ -45,9 +65,20 @@ export class DocumentService {
 
   async findRecent(userId: string) {
     const documents = await this.prisma.document.findMany({
-      where: { ownerId: userId, isDeleted: false, lastOpenedAt: { not: null } },
+      where: {
+        isDeleted: false,
+        lastOpenedAt: { not: null },
+        OR: [
+          { ownerId: userId },
+          { permissions: { some: { userId } } },
+        ],
+      },
       include: {
         owner: { select: { id: true, name: true, email: true } },
+        permissions: {
+          where: { userId },
+          select: { permission: true },
+        },
       },
       orderBy: { lastOpenedAt: 'desc' },
       take: 10,
@@ -57,11 +88,21 @@ export class DocumentService {
   }
 
   async findOne(userId: string, id: string) {
+    const userPermission = await this.sharingService.assertAccess(id, userId, DocumentPermissionLevel.VIEWER);
+
     const document = await this.prisma.document.findUnique({
       where: { id },
       include: {
         owner: { select: { id: true, name: true, email: true } },
         content: true,
+        permissions: {
+          select: {
+            id: true,
+            userId: true,
+            permission: true,
+            user: { select: { id: true, name: true, email: true } }
+          }
+        }
       },
     });
 
@@ -69,17 +110,11 @@ export class DocumentService {
       throw new NotFoundException('Document not found');
     }
 
-    if (document.ownerId !== userId) {
-      throw new ForbiddenException('You do not have access to this document');
-    }
-
-    return { document };
+    return { document: { ...document, userPermission } };
   }
 
   async rename(userId: string, id: string, dto: RenameDocumentDto) {
-    const document = await this.prisma.document.findUnique({ where: { id } });
-    if (!document || document.isDeleted) throw new NotFoundException('Document not found');
-    if (document.ownerId !== userId) throw new ForbiddenException('You do not have access to this document');
+    await this.sharingService.assertEditor(id, userId);
 
     const updated = await this.prisma.document.update({
       where: { id },
@@ -102,9 +137,7 @@ export class DocumentService {
   }
 
   async open(userId: string, id: string) {
-    const document = await this.prisma.document.findUnique({ where: { id } });
-    if (!document || document.isDeleted) throw new NotFoundException('Document not found');
-    if (document.ownerId !== userId) throw new ForbiddenException('You do not have access to this document');
+    await this.sharingService.assertViewer(id, userId);
 
     await this.prisma.document.update({
       where: { id },
@@ -115,13 +148,14 @@ export class DocumentService {
   }
 
   async duplicate(userId: string, id: string) {
+    await this.sharingService.assertViewer(id, userId);
+
     const document = await this.prisma.document.findUnique({
       where: { id },
       include: { content: true }
     });
 
     if (!document || document.isDeleted) throw new NotFoundException('Document not found');
-    if (document.ownerId !== userId) throw new ForbiddenException('You do not have access to this document');
 
     const duplicated = await this.prisma.document.create({
       data: {
@@ -130,6 +164,13 @@ export class DocumentService {
         content: {
           create: {
             content: document.content?.content || { ops: [{ insert: '\n' }] }
+          }
+        },
+        permissions: {
+          create: {
+            userId,
+            createdById: userId,
+            permission: DocumentPermissionLevel.OWNER,
           }
         }
       },
@@ -142,9 +183,7 @@ export class DocumentService {
   }
 
   async remove(userId: string, id: string) {
-    const document = await this.prisma.document.findUnique({ where: { id } });
-    if (!document || document.isDeleted) throw new NotFoundException('Document not found');
-    if (document.ownerId !== userId) throw new ForbiddenException('You do not have access to this document');
+    await this.sharingService.assertOwner(id, userId);
 
     await this.prisma.document.update({
       where: { id },
@@ -155,9 +194,10 @@ export class DocumentService {
   }
 
   async updateContent(userId: string, id: string, dto: UpdateDocumentContentDto) {
+    await this.sharingService.assertEditor(id, userId);
+
     const document = await this.prisma.document.findUnique({ where: { id } });
     if (!document || document.isDeleted) throw new NotFoundException('Document not found');
-    if (document.ownerId !== userId) throw new ForbiddenException('You do not have access to this document');
 
     await this.prisma.$transaction([
       this.prisma.documentContent.update({

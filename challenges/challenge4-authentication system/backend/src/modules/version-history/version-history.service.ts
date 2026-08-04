@@ -123,7 +123,7 @@ export class VersionHistoryService {
       documentId,
       userId,
       title: restoredSnapshot.title,
-      content: restoredSnapshot.content,
+      content: restoredSnapshot.content as Prisma.InputJsonValue,
       versionNumber: backupVersion.versionNumber + 1,
       changeDescription: `Restored version ${targetVersion.versionNumber}`,
       isRestored: true,
@@ -136,7 +136,7 @@ export class VersionHistoryService {
       }),
       this.prisma.documentContent.update({
         where: { documentId },
-        data: { content: restoredSnapshot.content },
+        data: { content: restoredSnapshot.content as Prisma.InputJsonValue },
       }),
     ]);
 

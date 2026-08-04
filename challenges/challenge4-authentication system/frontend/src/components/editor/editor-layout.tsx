@@ -5,6 +5,7 @@ import { DocumentHeader } from './document-header';
 import { RichTextEditor } from './rich-text-editor';
 import { EditorSidebar } from './editor-sidebar';
 import { useEffect, useRef, useState } from 'react';
+import { PermissionLevel } from '@/lib/sharing.service';
 
 export function EditorLayout({ document }: { document: Document }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -12,6 +13,8 @@ export function EditorLayout({ document }: { document: Document }) {
   const [currentDocument, setCurrentDocument] = useState(document);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
+
+  const userPermission: PermissionLevel = (currentDocument as any).userPermission || 'OWNER';
 
   useEffect(() => {
     setCurrentDocument(document);
@@ -54,7 +57,6 @@ export function EditorLayout({ document }: { document: Document }) {
 
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden">
-      {/* Sidebar - Optional toggleable left sidebar */}
       {sidebarOpen && (
         <div className="w-64 border-r border-border bg-secondary flex-shrink-0">
           <EditorSidebar />
@@ -66,9 +68,15 @@ export function EditorLayout({ document }: { document: Document }) {
           document={currentDocument} 
           toggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
           onOpenHistory={() => setRightSidebarTab('history')}
+          userPermission={userPermission}
         />
         <div className="flex-1 overflow-y-auto">
-          <RichTextEditor document={currentDocument} sidebarTab={rightSidebarTab} onSidebarTabChange={setRightSidebarTab} />
+          <RichTextEditor
+            document={currentDocument}
+            sidebarTab={rightSidebarTab}
+            onSidebarTabChange={setRightSidebarTab}
+            userPermission={userPermission}
+          />
         </div>
       </div>
 

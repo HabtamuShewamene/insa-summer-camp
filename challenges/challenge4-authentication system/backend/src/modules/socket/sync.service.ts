@@ -24,9 +24,7 @@ export class SyncService {
     if (this.documents.has(documentId)) {
       this.documents.get(documentId)?.destroy();
     }
-
-    const restoredDoc = prosemirrorJSONToYDoc(content ?? { ops: [{ insert: '\n' }] });
-    this.documents.set(documentId, restoredDoc);
+    this.documents.set(documentId, new Y.Doc());
   }
 
   getStateVector(documentId: string): Uint8Array {

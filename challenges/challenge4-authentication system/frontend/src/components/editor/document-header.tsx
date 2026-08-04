@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Document } from '@/lib/document.service';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, History, Menu, Share2, Users } from 'lucide-react';
+import { ArrowLeft, History, Menu, Share2, Users, Lock, UserCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { SavingIndicator } from './saving-indicator';
@@ -13,28 +13,38 @@ import { TypingIndicator } from '@/components/collaboration/typing-indicator';
 import { CollaboratorPanel } from '@/components/collaboration/collaborator-panel';
 import { Separator } from '@/components/ui/separator';
 import { useCollaboration } from '@/lib/collaboration-context';
+import { ShareDialog } from '@/components/sharing/ShareDialog';
+import { PermissionBadge } from '@/components/sharing/PermissionBadge';
+import { PermissionLevel } from '@/lib/sharing.service';
+import { useAuth } from '@/lib/auth-context';
 
 export function DocumentHeader({ 
   document, 
   toggleSidebar,
   onOpenHistory,
+  userPermission = 'OWNER',
 }: { 
   document: Document; 
   toggleSidebar: () => void;
   onOpenHistory: () => void;
+  userPermission?: PermissionLevel;
 }) {
   const router = useRouter();
+  const { user } = useAuth();
   const { activeUsers } = useCollaboration();
   const [isPanelOpen, setIsPanelOpen] = useState(false);
-  const [typingUsers, setTypingUsers] = useState<any[]>([]);
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [typingUsers] = useState<any[]>([]);
 
-  // Map active users to collaborator format
-  const collaborators = activeUsers.map((user) => ({
-    id: user.id,
-    name: user.name,
+  const isOwner = userPermission === 'OWNER' || document.ownerId === user?.id;
+  const permissionsCount = (document as any).permissions?.length || 0;
+
+  const collaborators = activeUsers.map((u) => ({
+    id: u.id,
+    name: u.name,
     email: '',
-    avatar: user.avatar,
-    color: user.color || '#6B7280',
+    avatar: u.avatar,
+    color: u.color || '#6B7280',
     status: 'online' as const,
     lastActive: new Date(),
     joinedAt: new Date(),
@@ -60,9 +70,12 @@ export function DocumentHeader({
           <Separator orientation="vertical" className="h-4 mx-2" />
           
           <div className="flex flex-col justify-center min-w-0 flex-1">
-            <span className="font-semibold text-sm truncate">
-              {document.title}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-sm truncate">
+                {document.title}
+              </span>
+              <PermissionBadge permission={userPermission} />
+            </div>
             <TypingIndicator typingUsers={typingUsers} />
           </div>
         </div>
@@ -95,8 +108,8 @@ export function DocumentHeader({
               )}
             </Button>
             
-            <Button variant="outline" size="sm" disabled>
-              <Share2 className="h-4 w-4 mr-2" />
+            <Button variant="outline" size="sm" onClick={() => setIsShareOpen(true)}>
+              <Share2 className="h-4 w-4 mr-2 text-primary" />
               Share
             </Button>
 
@@ -113,11 +126,18 @@ export function DocumentHeader({
         </div>
       </div>
 
-      {/* Collaborator Panel */}
       <CollaboratorPanel
         collaborators={collaborators}
         isOpen={isPanelOpen}
         onClose={() => setIsPanelOpen(false)}
+      />
+
+      <ShareDialog
+        documentId={document.id}
+        documentTitle={document.title}
+        isOpen={isShareOpen}
+        onClose={() => setIsShareOpen(false)}
+        isOwner={isOwner}
       />
     </>
   );

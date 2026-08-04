@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Request,
+  Req,
   ForbiddenException,
 } from '@nestjs/common';
 import { CommentsService } from './comments.service';
@@ -76,7 +77,7 @@ export class CommentActionsController {
    * Get a single comment
    */
   @Get(':id')
-  async getComment(@Param('id') id: string) {
+  async getComment(@Req() req: any, @Param('id') id: string) {
     return this.commentsService.getCommentById(id, req.user.id);
   }
 
