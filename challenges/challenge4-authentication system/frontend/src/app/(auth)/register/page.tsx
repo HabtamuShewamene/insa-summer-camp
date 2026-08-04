@@ -45,9 +45,18 @@ export default function RegisterPage() {
         email: data.email,
         password: data.password,
       });
+      // Successfully registered - redirect to dashboard
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Registration failed');
+      const errorMessage = err.response?.data?.message || err.message || 'Registration failed';
+      
+      // Check if user already exists
+      if (errorMessage.toLowerCase().includes('already registered') || 
+          errorMessage.toLowerCase().includes('already exists')) {
+        setError('This email is already registered. Please login instead or use a different email.');
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }

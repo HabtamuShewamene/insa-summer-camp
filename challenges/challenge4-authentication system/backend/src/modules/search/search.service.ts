@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
-interface SearchQuery {
+export interface SearchQuery {
   query: string;
   limit?: number;
   offset?: number;
 }
 
-interface SearchResult {
+export interface SearchResult {
   id: string;
   title: string;
   content?: string;
@@ -25,7 +25,7 @@ interface SearchResult {
   isShared?: boolean;
 }
 
-interface SearchResponse {
+export interface SearchResponse {
   results: SearchResult[];
   total: number;
   query: string;
@@ -61,16 +61,6 @@ export class SearchService {
       where: {
         AND: [
           accessibleDocuments,
-          {
-            OR: [
-              {
-                title: {
-                  contains: searchTerm,
-                  mode: 'insensitive',
-                },
-              },
-            ],
-          },
         ],
       },
       include: {
@@ -97,11 +87,16 @@ export class SearchService {
           },
         },
       },
-      take: limit,
-      skip: offset,
       orderBy: {
         updatedAt: 'desc',
       },
+    });
+
+    const normalizedTerm = searchTerm.trim().toLowerCase();
+    const matchingDocuments = documents.filter((doc) => {
+      const contentText = this.extractTextFromContent(doc.content?.content).toLowerCase();
+      return [doc.title, doc.owner.name, doc.owner.email, contentText]
+        .some((value) => value.toLowerCase().includes(normalizedTerm));
     });
 
     // Search in comments
@@ -136,12 +131,10 @@ export class SearchService {
           },
         },
       },
-      take: limit,
-      skip: offset,
     });
 
     // Transform documents to search results
-    const documentResults: SearchResult[] = documents.map((doc) => {
+    const documentResults: SearchResult[] = matchingDocuments.map((doc) => {
       const contentText = this.extractTextFromContent(doc.content?.content);
       const excerpt = this.createExcerpt(contentText, searchTerm);
 
@@ -187,7 +180,7 @@ export class SearchService {
     const took = Date.now() - startTime;
 
     return {
-      results: uniqueResults.slice(0, limit),
+      results: uniqueResults.slice(offset, offset + limit),
       total: uniqueResults.length,
       query: searchTerm,
       took,

@@ -44,7 +44,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [activeUsers, setActiveUsers] = useState<CollaborationUser[]>([]);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize Socket.IO connection when user is authenticated
   useEffect(() => {
@@ -80,6 +80,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: 10,
+      autoConnect: true,
     });
 
     // Connection event handlers

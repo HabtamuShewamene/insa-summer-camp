@@ -13,6 +13,7 @@ import { PasswordService } from './password.service';
 import { SecurityService } from '@/modules/security/security.service';
 import { BruteForceService } from '@/modules/security/brute-force.service';
 import { SessionsService } from '@/modules/sessions/sessions.service';
+import { MailService } from '@/modules/mail/mail.service';
 import {
   RegisterDto,
   LoginDto,
@@ -39,9 +40,9 @@ export class AuthService {
     private securityService: SecurityService,
     private bruteForceService: BruteForceService,
     private sessionsService: SessionsService,
+    private mailService: MailService,
   ) {}
 
-  // TODO: Add email verification flow
   // Register new user
   async register(dto: RegisterDto, req: Request) {
     // Check if user already exists
@@ -64,9 +65,19 @@ export class AuthService {
         email: dto.email.toLowerCase(),
         passwordHash,
         provider: AuthProvider.LOCAL,
-        emailVerified: false, // TODO: implement email verification
+        emailVerified: false,
       },
     });
+
+    const verificationToken = generateRefreshToken();
+    await this.prisma.emailVerificationToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: await hashToken(verificationToken),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+    await this.mailService.sendEmailVerification(user.email, verificationToken);
 
     // Log registration event
     const { ipAddress } = extractDeviceInfo(req);
@@ -276,10 +287,34 @@ export class AuthService {
   // ─── Password reset ───────────────────────────────────────────────────────────
 
   async forgotPassword(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    if (user?.passwordHash) {
+      const token = generateRefreshToken();
+      await this.prisma.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash: await hashToken(token),
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        },
+      });
+      await this.mailService.sendPasswordResetEmail(user.email, token);
+    }
     return { message: 'If an account exists, a password reset email has been sent.' };
   }
 
-  async resetPassword(dto: any) {
+  async resetPassword(dto: { token: string; newPassword: string }) {
+    const tokenHash = await hashToken(dto.token);
+    const record = await this.prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+    if (!record || record.used || record.expiresAt < new Date()) {
+      throw new BadRequestException('Invalid or expired password reset token');
+    }
+
+    const passwordHash = await this.passwordService.hashPassword(dto.newPassword);
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: record.userId }, data: { passwordHash } }),
+      this.prisma.passwordResetToken.update({ where: { id: record.id }, data: { used: true } }),
+      this.prisma.session.updateMany({ where: { userId: record.userId }, data: { revoked: true } }),
+    ]);
     return { message: 'Password reset successfully. Please log in.' };
   }
 
@@ -294,7 +329,12 @@ export class AuthService {
   }
 
   async getSecurityDashboard(userId: string, sessionId?: string) {
-    return { activeSessions: [], loginHistory: [], securityEvents: [] };
+    const [activeSessions, loginHistory, securityEvents] = await Promise.all([
+      this.sessionsService.getActiveSessions(userId, sessionId),
+      this.securityService.getLoginHistory(userId),
+      this.securityService.getSecurityEvents(userId),
+    ]);
+    return { activeSessions, loginHistory, securityEvents };
   }
 
   // ─── Password strength check (public endpoint) ───────────────────────────────

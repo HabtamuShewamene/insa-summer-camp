@@ -70,15 +70,16 @@ export const CommentHighlight = Mark.create<CommentHighlightOptions>({
           if (commentId) {
             // Remove specific comment highlight
             const { from, to } = state.selection;
-            const marks = state.doc.nodesBetween(from, to, (node, pos) => {
+            let hasCommentMark = false;
+            state.doc.nodesBetween(from, to, (node) => {
               if (node.isInline) {
-                return node.marks.filter(
-                  mark => mark.type.name === this.name && mark.attrs.commentId === commentId
-                );
+                hasCommentMark = node.marks.some(
+                  mark => mark.type.name === this.name && mark.attrs.commentId === commentId,
+                ) || hasCommentMark;
               }
             });
             
-            if (marks) {
+            if (hasCommentMark) {
               return commands.unsetMark(this.name);
             }
             return false;

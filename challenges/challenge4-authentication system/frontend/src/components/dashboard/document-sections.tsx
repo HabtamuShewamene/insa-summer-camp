@@ -1,17 +1,48 @@
 'use client';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { DocumentCard } from './document-card';
 import { Button } from '@/components/ui/button';
 import { PlusCircle, Search, FileText } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { api } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 
 export function DocumentSections() {
+  const router = useRouter();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'my-docs' | 'shared' | 'recent'>('my-docs');
+  const [isCreating, setIsCreating] = useState(false);
+  
   const myDocs = [{ id: '1', title: 'Sprint Planning Q3', lastModified: '2 hours ago', owner: 'Me', status: 'Draft' }, { id: '2', title: 'Architecture Overview', lastModified: 'Yesterday', owner: 'Me', status: 'Final' }];
   const sharedDocs = [{ id: '3', title: 'Weekly Sync Notes', lastModified: '3 hours ago', sharedBy: 'Sarah Connor', permission: 'Editor' }];
   const recentDocs = [...myDocs, ...sharedDocs].sort(() => Math.random() - 0.5);
   const docs = activeTab === 'my-docs' ? myDocs : activeTab === 'shared' ? sharedDocs : recentDocs;
+
+  const handleCreateDocument = async () => {
+    setIsCreating(true);
+    try {
+      const response = await api.createDocument({ title: 'Untitled Document' });
+      console.log('Document created:', response); // Debug log
+      toast({
+        title: 'Document created',
+        description: 'Your new document is ready',
+      });
+      // Access the document ID from the response structure
+      router.push(`/documents/${response.document.id}`);
+    } catch (error: any) {
+      console.error('Failed to create document:', error);
+      const errorMsg = error.response?.data?.message || error.message || 'Failed to create document';
+      toast({
+        title: 'Error',
+        description: errorMsg,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
   return (
     <div className="space-y-4 mb-8">
@@ -26,7 +57,10 @@ export function DocumentSections() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Filter documents..." className="pl-9 bg-background" />
           </div>
-          <Button><PlusCircle className="h-4 w-4 mr-2" />New Document</Button>
+          <Button onClick={handleCreateDocument} disabled={isCreating}>
+            <PlusCircle className="h-4 w-4 mr-2" />
+            {isCreating ? 'Creating...' : 'New Document'}
+          </Button>
         </div>
       </div>
       {docs.length > 0 ? (
@@ -38,7 +72,10 @@ export function DocumentSections() {
           <div className="bg-primary/10 p-4 rounded-full mb-4"><FileText className="h-10 w-10 text-primary" /></div>
           <h3 className="text-xl font-bold mb-2">No documents yet</h3>
           <p className="text-muted-foreground mb-6 max-w-sm">Get started by creating your first document and collaborating with your team in real time.</p>
-          <Button size="lg"><PlusCircle className="h-5 w-5 mr-2" />Create Your First Document</Button>
+          <Button size="lg" onClick={handleCreateDocument} disabled={isCreating}>
+            <PlusCircle className="h-5 w-5 mr-2" />
+            {isCreating ? 'Creating...' : 'Create Your First Document'}
+          </Button>
         </motion.div>
       )}
     </div>

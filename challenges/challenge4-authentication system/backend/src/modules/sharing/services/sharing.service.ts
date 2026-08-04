@@ -1,190 +1,164 @@
-import { BadRequestException, ForbiddenException, NotFoundException, Injectable } from '@nestjs/common';
-import { DocumentPermissionLevel, Prisma } from '@prisma/client';
-import { PrismaService } from '../../../prisma/prisma.service';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { DocumentPermissionLevel } from '@prisma/client';
 import { SharingRepository } from '../repositories/sharing.repository';
 import { ShareDocumentDto } from '../dto/share-document.dto';
 import { UpdatePermissionDto } from '../dto/update-permission.dto';
-import { SocketServer } from '../../socket/socket.server';
 
 @Injectable()
 export class SharingService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly repository: SharingRepository,
-    private readonly socketServer: SocketServer,
-  ) {}
-
-  async resolvePermission(documentId: string, userId: string): Promise<DocumentPermissionLevel | null> {
-    const document = await this.prisma.document.findUnique({ where: { id: documentId } });
-    if (!document || document.isDeleted) {
-      return null;
-    }
-
-    if (document.ownerId === userId) {
-      return DocumentPermissionLevel.OWNER;
-    }
-
-    const permission = await this.repository.findPermission(documentId, userId);
-    return permission?.permission ?? null;
-  }
-
-  async assertAccess(documentId: string, userId: string, minimum: DocumentPermissionLevel): Promise<DocumentPermissionLevel> {
-    const permission = await this.resolvePermission(documentId, userId);
-    if (!permission) {
-      throw new ForbiddenException('You do not have access to this document');
-    }
-
-    const rank = this.permissionRank(permission);
-    if (rank < this.permissionRank(minimum)) {
-      throw new ForbiddenException('You do not have sufficient access to this document');
-    }
-
-    return permission;
-  }
-
-  async assertOwner(documentId: string, userId: string): Promise<void> {
-    const permission = await this.resolvePermission(documentId, userId);
-    if (permission !== DocumentPermissionLevel.OWNER) {
-      throw new ForbiddenException('You do not have access to this document');
-    }
-  }
-
-  async assertEditor(documentId: string, userId: string): Promise<void> {
-    const permission = await this.resolvePermission(documentId, userId);
-    if (!permission || this.permissionRank(permission) < this.permissionRank(DocumentPermissionLevel.EDITOR)) {
-      throw new ForbiddenException('You do not have access to this document');
-    }
-  }
-
-  async assertCommenter(documentId: string, userId: string): Promise<void> {
-    const permission = await this.resolvePermission(documentId, userId);
-    if (!permission || this.permissionRank(permission) < this.permissionRank(DocumentPermissionLevel.COMMENTER)) {
-      throw new ForbiddenException('You do not have access to this document');
-    }
-  }
-
-  async assertViewer(documentId: string, userId: string): Promise<void> {
-    const permission = await this.resolvePermission(documentId, userId);
-    if (!permission) {
-      throw new ForbiddenException('You do not have access to this document');
-    }
-  }
-
-  async getDocumentPermissions(documentId: string, userId: string) {
-    await this.assertOwner(documentId, userId);
-    return this.repository.findPermissions(documentId);
-  }
-
-  async shareDocument(documentId: string, ownerUserId: string, dto: ShareDocumentDto) {
-    await this.assertOwner(documentId, ownerUserId);
-
-    const targetUser = await this.prisma.user.findUnique({
-      where: { email: dto.email.toLowerCase() },
-      select: { id: true, name: true, email: true },
-    });
-
-    if (!targetUser) {
-      throw new NotFoundException('User not found');
-    }
-
-    const document = await this.prisma.document.findUnique({ where: { id: documentId } });
-    if (!document || document.isDeleted) {
-      throw new NotFoundException('Document not found');
-    }
-
-    const permission = targetUser.id === document.ownerId
-      ? DocumentPermissionLevel.OWNER
-      : dto.permission;
-
-    const record = await this.repository.upsertPermission({
-      documentId,
-      userId: targetUser.id,
-      createdById: ownerUserId,
-      permission,
-    });
-
-    this.socketServer.broadcastDocumentShared(targetUser.id, {
-      documentId,
-      user: targetUser,
-      permission: record.permission,
-    });
-
-    this.socketServer.broadcastPermissionUpdated(documentId, {
-      documentId,
-      permission: record.permission,
-      userId: targetUser.id,
-      permissionId: record.id,
-    });
-
-    return record;
-  }
-
-  async updatePermission(documentId: string, permissionId: string, ownerUserId: string, dto: UpdatePermissionDto) {
-    await this.assertOwner(documentId, ownerUserId);
-
-    const permissionRecord = await this.repository.findPermissionById(documentId, permissionId);
-    if (!permissionRecord) {
-      throw new NotFoundException('Permission not found');
-    }
-
-    if (permissionRecord.permission === DocumentPermissionLevel.OWNER) {
-      throw new BadRequestException('Owner permission cannot be changed');
-    }
-
-    const updated = await this.repository.updatePermission(permissionId, {
-      permission: dto.permission,
-    });
-
-    this.socketServer.broadcastPermissionUpdated(documentId, {
-      documentId,
-      permission: updated.permission,
-      userId: updated.userId,
-      permissionId: updated.id,
-    });
-
-    return updated;
-  }
-
-  async removePermission(documentId: string, permissionId: string, ownerUserId: string) {
-    await this.assertOwner(documentId, ownerUserId);
-
-    const permissionRecord = await this.repository.findPermissionById(documentId, permissionId);
-    if (!permissionRecord) {
-      throw new NotFoundException('Permission not found');
-    }
-
-    if (permissionRecord.permission === DocumentPermissionLevel.OWNER) {
-      throw new BadRequestException('Owner permission cannot be removed');
-    }
-
-    await this.repository.deletePermission(permissionId);
-
-    this.socketServer.broadcastPermissionRemoved(documentId, {
-      documentId,
-      permissionId,
-      userId: permissionRecord.userId,
-    });
-
-    this.socketServer.broadcastDocumentAccessRevoked(permissionRecord.userId, {
-      documentId,
-      permissionId,
-    });
-
-    return { message: 'Access removed successfully' };
-  }
-
-  async getPermissionForUser(documentId: string, userId: string) {
-    return this.resolvePermission(documentId, userId);
-  }
+  constructor(private readonly repository: SharingRepository) {}
 
   private permissionRank(permission: DocumentPermissionLevel): number {
-    const ranks: Record<DocumentPermissionLevel, number> = {
+    return {
       [DocumentPermissionLevel.VIEWER]: 1,
       [DocumentPermissionLevel.COMMENTER]: 2,
       [DocumentPermissionLevel.EDITOR]: 3,
       [DocumentPermissionLevel.OWNER]: 4,
-    };
+    }[permission];
+  }
 
-    return ranks[permission];
+  async getPermissionForUser(documentId: string, userId: string): Promise<DocumentPermissionLevel | null> {
+    const access = await this.repository.getUserAccessInfo(documentId, userId);
+    return access?.permission ?? null;
+  }
+
+  async assertAccess(
+    documentId: string,
+    userId: string,
+    minimum: DocumentPermissionLevel = DocumentPermissionLevel.VIEWER,
+  ): Promise<DocumentPermissionLevel> {
+    const document = await this.repository.findDocumentById(documentId);
+    if (!document || document.isDeleted) throw new NotFoundException('Document not found');
+
+    const permission = await this.getPermissionForUser(documentId, userId);
+    if (!permission || this.permissionRank(permission) < this.permissionRank(minimum)) {
+      throw new ForbiddenException('You do not have sufficient permission for this action');
+    }
+    return permission;
+  }
+
+  async assertOwner(documentId: string, userId: string) {
+    return this.assertAccess(documentId, userId, DocumentPermissionLevel.OWNER);
+  }
+
+  async assertEditor(documentId: string, userId: string) {
+    return this.assertAccess(documentId, userId, DocumentPermissionLevel.EDITOR);
+  }
+
+  async assertCommenter(documentId: string, userId: string) {
+    return this.assertAccess(documentId, userId, DocumentPermissionLevel.COMMENTER);
+  }
+
+  async assertViewer(documentId: string, userId: string) {
+    return this.assertAccess(documentId, userId, DocumentPermissionLevel.VIEWER);
+  }
+
+  async shareDocument(documentId: string, userId: string, dto: ShareDocumentDto) {
+    // Check if user is owner
+    const document = await this.repository.findDocumentById(documentId);
+    if (!document) {
+      throw new NotFoundException('Document not found');
+    }
+
+    if (document.ownerId !== userId) {
+      throw new ForbiddenException('Only the owner can share this document');
+    }
+
+    // Find user by email
+    const targetUser = await this.repository.findUserByEmail(dto.email);
+    if (!targetUser) {
+      throw new BadRequestException('User not found');
+    }
+
+    // Check if already shared
+    const existing = await this.repository.findUserPermission(documentId, targetUser.id);
+    if (existing) {
+      throw new BadRequestException('Document already shared with this user');
+    }
+
+    // Create permission
+    const permission = await this.repository.createPermission(
+      documentId,
+      targetUser.id,
+      dto.permission,
+      userId,
+    );
+
+    return {
+      success: true,
+      permission,
+    };
+  }
+
+  async getDocumentPermissions(documentId: string, userId: string) {
+    const document = await this.repository.findDocumentById(documentId);
+    if (!document) {
+      throw new NotFoundException('Document not found');
+    }
+
+    // Check if user has access
+    const hasAccess = document.ownerId === userId || 
+      await this.repository.findUserPermission(documentId, userId);
+    
+    if (!hasAccess) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    const permissions = await this.repository.getDocumentPermissions(documentId);
+    
+    return {
+      success: true,
+      permissions,
+    };
+  }
+
+  async updatePermission(
+    documentId: string,
+    permissionId: string,
+    userId: string,
+    dto: UpdatePermissionDto,
+  ) {
+    const document = await this.repository.findDocumentById(documentId);
+    if (!document) {
+      throw new NotFoundException('Document not found');
+    }
+
+    if (document.ownerId !== userId) {
+      throw new ForbiddenException('Only the owner can update permissions');
+    }
+
+    const permission = await this.repository.findPermissionById(permissionId);
+    if (!permission || permission.documentId !== documentId) {
+      throw new NotFoundException('Permission not found');
+    }
+
+    const updated = await this.repository.updatePermission(permissionId, dto.permission);
+
+    return {
+      success: true,
+      permission: updated,
+    };
+  }
+
+  async removePermission(documentId: string, permissionId: string, userId: string) {
+    const document = await this.repository.findDocumentById(documentId);
+    if (!document) {
+      throw new NotFoundException('Document not found');
+    }
+
+    if (document.ownerId !== userId) {
+      throw new ForbiddenException('Only the owner can remove permissions');
+    }
+
+    const permission = await this.repository.findPermissionById(permissionId);
+    if (!permission || permission.documentId !== documentId) {
+      throw new NotFoundException('Permission not found');
+    }
+
+    await this.repository.deletePermission(permissionId);
+
+    return {
+      success: true,
+    };
   }
 }

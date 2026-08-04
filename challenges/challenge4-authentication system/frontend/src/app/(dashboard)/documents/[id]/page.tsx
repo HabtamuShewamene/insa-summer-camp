@@ -15,6 +15,7 @@ export default function DocumentEditorPage({ params }: { params: Promise<{ id: s
   const { data, isLoading, error } = useQuery({
     queryKey: ['document', resolvedParams.id],
     queryFn: () => documentService.getDocument(resolvedParams.id),
+    retry: 1,
   });
 
   if (isLoading) {
@@ -25,7 +26,13 @@ export default function DocumentEditorPage({ params }: { params: Promise<{ id: s
     );
   }
 
-  if (error || !data) {
+  // Log error for debugging
+  if (error) {
+    console.error('Document fetch error:', error);
+  }
+
+  // Check if we have valid document data
+  if (error || !data || !data.document) {
     return <AccessDenied />;
   }
 

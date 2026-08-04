@@ -23,8 +23,9 @@ export function EditorLayout({ document }: { document: Document }) {
   useEffect(() => {
     const handleDocumentRestored = (event: Event) => {
       const detail = (event as CustomEvent<{ title?: string }>).detail;
-      if (detail?.title) {
-        setCurrentDocument((current) => ({ ...current, title: detail.title }));
+      const restoredTitle = detail?.title;
+      if (restoredTitle) {
+        setCurrentDocument((current) => ({ ...current, title: restoredTitle }));
       }
     };
 

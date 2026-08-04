@@ -143,6 +143,13 @@ apiClient.interceptors.response.use(
 
 // API methods
 export const api = {
+  // Generic authenticated request helpers used by feature services.
+  get: (url: string, config?: Parameters<typeof apiClient.get>[1]) => apiClient.get(url, config),
+  post: (url: string, data?: unknown, config?: Parameters<typeof apiClient.post>[2]) => apiClient.post(url, data, config),
+  put: (url: string, data?: unknown, config?: Parameters<typeof apiClient.put>[2]) => apiClient.put(url, data, config),
+  patch: (url: string, data?: unknown, config?: Parameters<typeof apiClient.patch>[2]) => apiClient.patch(url, data, config),
+  delete: (url: string, config?: Parameters<typeof apiClient.delete>[1]) => apiClient.delete(url, config),
+
   async register(data: { name: string; email: string; password: string }) {
     const res = await apiClient.post('/auth/register', data);
     return res.data;
@@ -207,6 +214,32 @@ export const api = {
 
   async verifyEmail(token: string) {
     const res = await apiClient.post('/auth/verify-email', { token });
+    return res.data;
+  },
+
+  // Documents
+  async createDocument(data: { title: string; content?: string }) {
+    const res = await apiClient.post('/documents', data);
+    return res.data;
+  },
+
+  async getDocuments() {
+    const res = await apiClient.get('/documents');
+    return res.data;
+  },
+
+  async getDocument(id: string) {
+    const res = await apiClient.get(`/documents/${id}`);
+    return res.data;
+  },
+
+  async updateDocument(id: string, data: { title?: string; content?: string }) {
+    const res = await apiClient.patch(`/documents/${id}`, data);
+    return res.data;
+  },
+
+  async deleteDocument(id: string) {
+    const res = await apiClient.delete(`/documents/${id}`);
     return res.data;
   },
 };

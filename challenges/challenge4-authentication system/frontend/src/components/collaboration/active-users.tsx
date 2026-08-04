@@ -110,3 +110,6 @@ export function ActiveCollaborators({ onOpenPanel }: ActiveCollaboratorsProps) {
     </TooltipProvider>
   );
 }
+
+// Backwards-compatible name used by the collaboration indicator and barrel export.
+export const ActiveUsers = ActiveCollaborators;

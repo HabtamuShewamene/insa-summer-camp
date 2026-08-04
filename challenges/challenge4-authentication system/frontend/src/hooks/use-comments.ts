@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { commentService, Comment, CommentReply, CreateCommentDto, CreateReplyDto } from '@/lib/comment.service';
 import { useCommentSocket } from './use-comment-socket';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 
 export function useComments(documentId: string, includeResolved = false) {
   // Initialize Socket.IO for real-time updates

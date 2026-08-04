@@ -22,7 +22,7 @@ export function usePresenceTracking({
   activityThreshold = 5000,
 }: UsePresenceTrackingOptions) {
   const { socket, isConnected } = useCollaboration();
-  const typingTimeoutRef = useRef<NodeJS.Timeout>();
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTypingRef = useRef(false);
   const lastActivityRef = useRef<number>(Date.now());
 

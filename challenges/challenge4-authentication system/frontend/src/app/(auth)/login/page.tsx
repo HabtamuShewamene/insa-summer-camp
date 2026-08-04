@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 function LoginForm() {
   const { login, user, isLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLocked, setIsLocked] = useState(false);
@@ -43,6 +44,20 @@ function LoginForm() {
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
   });
+
+  // Check for OAuth error in URL
+  useEffect(() => {
+    const oauthError = searchParams.get('error');
+    if (oauthError) {
+      if (oauthError === 'oauth_failed') {
+        setError('Google sign-in failed. Please try again or use email/password.');
+      } else {
+        setError(decodeURIComponent(oauthError));
+      }
+      // Clean up URL
+      router.replace('/login', { scroll: false });
+    }
+  }, [searchParams, router]);
 
   // Redirect if already logged in
   useEffect(() => {

@@ -12,6 +12,8 @@ import { SocketModule } from './modules/socket/socket.module';
 import { CommentsModule } from './modules/comments/comments.module';
 import { SharingModule } from './modules/sharing/sharing.module';
 import { SearchModule } from './modules/search/search.module';
+import { ExportModule } from './modules/export/export.module';
+import { HealthModule } from './health/health.module';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
@@ -35,6 +37,8 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     CommentsModule,
     SharingModule,
     SearchModule,
+    ExportModule,
+    HealthModule,
   ],
   providers: [
     {

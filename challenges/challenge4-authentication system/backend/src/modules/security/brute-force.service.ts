@@ -57,6 +57,19 @@ export class BruteForceService {
     await this.resetAttempts(email, ipAddress);
   }
 
+  /** Non-throwing compatibility helper for guards, health checks, and tests. */
+  async isBlocked(email: string, ipAddress: string): Promise<boolean> {
+    const record = await this.prisma.loginAttempt.findUnique({
+      where: { email_ipAddress: { email, ipAddress } },
+    });
+
+    if (!record?.blockedUntil) return false;
+    if (record.blockedUntil > new Date()) return true;
+
+    await this.resetAttempts(email, ipAddress);
+    return false;
+  }
+
   // ── Called AFTER password verification (pass success=true on correct pw) ──
 
   async recordAttempt(

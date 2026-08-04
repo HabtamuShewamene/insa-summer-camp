@@ -220,7 +220,7 @@ export function EnhancedRichTextEditor({
     // Scroll to and highlight the comment in the editor
     if (editor) {
       // Find the comment highlight and scroll to it
-      const commentElements = document.querySelectorAll(`[data-comment-id="${commentId}"]`);
+      const commentElements = globalThis.document.querySelectorAll(`[data-comment-id="${commentId}"]`);
       if (commentElements.length > 0) {
         commentElements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
         

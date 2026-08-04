@@ -156,6 +156,11 @@ export class AuthController {
     @Res() res: Response,
   ) {
     try {
+      // Check if user was authenticated
+      if (!req.user) {
+        throw new Error('No user from Google OAuth');
+      }
+
       const result = await this.authService.googleLogin(req.user, req);
       const frontendUrl =
         this.configService.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
@@ -167,9 +172,11 @@ export class AuthController {
 
       res.redirect(`${frontendUrl}/auth/callback?${params.toString()}`);
     } catch (err) {
+      console.error('Google OAuth Error:', err);
       const frontendUrl =
         this.configService.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
-      res.redirect(`${frontendUrl}/login?error=oauth_failed`);
+      const errorMsg = err instanceof Error ? err.message : 'oauth_failed';
+      res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(errorMsg)}`);
     }
   }
 }

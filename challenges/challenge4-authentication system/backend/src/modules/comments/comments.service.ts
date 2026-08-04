@@ -506,16 +506,11 @@ export class CommentsService {
    * Verify user has access to document
    */
   async verifyDocumentAccess(documentId: string, userId: string): Promise<boolean> {
-    const document = await this.prisma.document.findUnique({
-      where: { id: documentId },
-    });
-
-    if (!document || document.isDeleted) {
+    try {
+      await this.sharingService.assertViewer(documentId, userId);
+      return true;
+    } catch {
       return false;
     }
-
-    // For now, only document owner has access
-    // TODO: Implement proper permission system with viewers/editors
-    return document.ownerId === userId;
   }
 }

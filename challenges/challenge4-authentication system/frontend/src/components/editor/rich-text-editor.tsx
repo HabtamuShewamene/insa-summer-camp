@@ -98,7 +98,7 @@ function EditorInstance({ document, provider, ydoc, user, sidebarTab, onSidebarT
   });
 
   const [selectedText, setSelectedText] = useState<string | null>(null);
-  const [selectedRange, setSelectedRange] = useState<CommentPositionData | null>(null);
+  const [selectedRange, setSelectedRange] = useState<{ from: number; to: number } | null>(null);
   const [isCommentDraftOpen, setIsCommentDraftOpen] = useState(false);
 
   const debouncedSave = useRef(
