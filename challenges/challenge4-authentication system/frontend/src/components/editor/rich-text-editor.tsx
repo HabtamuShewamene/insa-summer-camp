@@ -17,6 +17,7 @@ import { useEffect, useRef } from 'react';
 import { debounce } from 'lodash';
 import { useDocumentCollaboration } from '@/lib/use-document-collaboration';
 import { useCollaboration } from '@/lib/collaboration-context';
+import { usePresenceTracking } from '@/lib/use-presence-tracking';
 import { useAuth } from '@/lib/auth-context';
 import { Loader2 } from 'lucide-react';
 
@@ -64,6 +65,12 @@ export function RichTextEditor({ document }: { document: Document }) {
 }
 
 function EditorInstance({ document, provider, ydoc, user }: any) {
+  // Activity tracking
+  usePresenceTracking({
+    documentId: document.id,
+    enabled: true,
+  });
+
   const debouncedSave = useRef(
     debounce(async (jsonContent: any) => {
       try {

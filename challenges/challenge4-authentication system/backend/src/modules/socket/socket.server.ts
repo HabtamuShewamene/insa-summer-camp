@@ -13,6 +13,8 @@ import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
 import { SyncService } from './sync.service';
 import { DocumentRoomService, RoomUser } from './document.room';
+import { PresenceService } from './presence.service';
+import { UserStatus, PresenceEvent } from './presence.types';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @WebSocketGateway({
@@ -25,14 +27,21 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
   server: Server;
 
   private readonly logger = new Logger(SocketServer.name);
+  private idleCheckInterval: NodeJS.Timeout;
 
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly syncService: SyncService,
     private readonly roomService: DocumentRoomService,
+    private readonly presenceService: PresenceService,
     private readonly prisma: PrismaService,
-  ) {}
+  ) {
+    // Check for idle users every 30 seconds
+    this.idleCheckInterval = setInterval(() => {
+      this.checkIdleUsers();
+    }, 30000);
+  }
 
   async handleConnection(client: Socket) {
     try {
@@ -49,6 +58,8 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
       client.data.user = {
         id: user.id,
         name: user.name,
+        email: user.email,
+        avatar: user.avatar,
       };
 
       this.logger.log(`Client connected: ${client.id} (User: ${user.name})`);
@@ -62,10 +73,21 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
     const documentId = this.roomService.getUserRoom(client.id);
     if (documentId) {
       const user = this.roomService.removeUser(documentId, client.id);
+      const userPresence = this.presenceService.removeUser(client.id);
+      
       if (user) {
         client.to(documentId).emit('user-left', { userId: user.id, socketId: client.id });
         const users = this.roomService.getUsersInRoom(documentId);
         this.server.to(documentId).emit('room-users', users);
+        
+        // Send updated presence
+        if (userPresence) {
+          this.server.to(documentId).emit(PresenceEvent.USER_LEFT, {
+            userId: userPresence.id,
+            socketId: client.id,
+          });
+          this.broadcastPresence(documentId);
+        }
         
         // Clean up Yjs memory if room is empty
         this.syncService.removeDocIfEmpty(documentId, users.length);
@@ -82,22 +104,44 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
     const { documentId, color } = data;
     const user = client.data.user;
 
-    // Verify document exists and user has access (for now we assume if it exists and isn't deleted)
-    const doc = await this.prisma.document.findUnique({ where: { id: documentId } });
+    // Verify document exists and user has access
+    const doc = await this.prisma.document.findUnique({ 
+      where: { id: documentId },
+      select: { id: true, ownerId: true, isDeleted: true }
+    });
+    
     if (!doc || doc.isDeleted) {
       client.emit('error', { message: 'Document not found or inaccessible' });
       return;
     }
 
+    // TODO: Add more granular permission checks here
+    // For now, we allow access if document exists and isn't deleted
+
     client.join(documentId);
+    
+    const userColor = color || this.generateUserColor(user.id);
     
     const roomUser: RoomUser = {
       id: user.id,
       name: user.name,
       socketId: client.id,
-      color: color || '#000000',
+      color: userColor,
     };
     this.roomService.addUser(documentId, roomUser);
+
+    // Add to presence tracking
+    const userPresence = this.presenceService.addUser(
+      documentId,
+      user.id,
+      client.id,
+      {
+        name: user.name,
+        email: user.email,
+        color: userColor,
+        avatar: user.avatar,
+      },
+    );
 
     // Notify others in room
     client.to(documentId).emit('user-joined', roomUser);
@@ -106,12 +150,18 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
     const users = this.roomService.getUsersInRoom(documentId);
     this.server.to(documentId).emit('room-users', users);
 
+    // Send presence notification
+    this.server.to(documentId).emit(PresenceEvent.USER_JOINED, {
+      user: userPresence,
+    });
+
+    // Send current presence to the joining user
+    this.broadcastPresence(documentId);
+
     // Synchronize Yjs state
-    // Send the current server Yjs state vector to the client so it can send missing updates
     const stateVector = this.syncService.getStateVector(documentId);
     client.emit('sync-step-1', stateVector);
     
-    // Also send full update to client to ensure they have the latest
     const update = this.syncService.getUpdate(documentId);
     client.emit('document-update', update);
 
@@ -123,10 +173,21 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
     const { documentId } = data;
     client.leave(documentId);
     const user = this.roomService.removeUser(documentId, client.id);
+    const userPresence = this.presenceService.removeUser(client.id);
+    
     if (user) {
       client.to(documentId).emit('user-left', { userId: user.id, socketId: client.id });
       const users = this.roomService.getUsersInRoom(documentId);
       this.server.to(documentId).emit('room-users', users);
+      
+      if (userPresence) {
+        this.server.to(documentId).emit(PresenceEvent.USER_LEFT, {
+          userId: userPresence.id,
+          socketId: client.id,
+        });
+        this.broadcastPresence(documentId);
+      }
+      
       this.syncService.removeDocIfEmpty(documentId, users.length);
     }
   }
@@ -137,6 +198,9 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { documentId: string, update: Uint8Array }
   ) {
     const { documentId, update } = data;
+    
+    // Update activity
+    this.presenceService.updateActivity(client.id);
     
     // Convert Buffer/array to Uint8Array if necessary
     const updateArray = new Uint8Array(update);
@@ -175,6 +239,100 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { documentId: string, update: Uint8Array }
   ) {
+    // Update activity on awareness changes (cursor movement, selection)
+    this.presenceService.updateActivity(client.id);
     client.to(data.documentId).emit('awareness-update', new Uint8Array(data.update));
+  }
+
+  @SubscribeMessage('user-typing')
+  handleUserTyping(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { documentId: string, isTyping: boolean }
+  ) {
+    const { documentId, isTyping } = data;
+    const typingState = this.presenceService.setUserTyping(client.id, isTyping);
+    
+    if (typingState) {
+      // Broadcast typing state to others in room
+      client.to(documentId).emit(PresenceEvent.USER_TYPING, {
+        userId: typingState.userId,
+        name: typingState.name,
+        isTyping: typingState.isTyping,
+      });
+    }
+  }
+
+  @SubscribeMessage('user-activity')
+  handleUserActivity(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { documentId: string }
+  ) {
+    this.presenceService.updateActivity(client.id);
+  }
+
+  /**
+   * Broadcast current presence to all users in document
+   */
+  private broadcastPresence(documentId: string): void {
+    const users = this.presenceService.getUsersInDocument(documentId);
+    const typingUsers = this.presenceService.getTypingUsers(documentId);
+    
+    this.server.to(documentId).emit('presence-update', {
+      users,
+      typingUsers,
+    });
+  }
+
+  /**
+   * Check for idle users periodically
+   */
+  private checkIdleUsers(): void {
+    this.presenceService.checkIdleUsers();
+    
+    // Broadcast updated presence for all active documents
+    const activeDocuments = this.presenceService.getActiveDocuments();
+    for (const documentId of activeDocuments) {
+      const users = this.presenceService.getUsersInDocument(documentId);
+      const idleUsers = users.filter(u => u.status === UserStatus.IDLE);
+      
+      if (idleUsers.length > 0) {
+        this.server.to(documentId).emit('presence-update', {
+          users,
+          typingUsers: this.presenceService.getTypingUsers(documentId),
+        });
+      }
+    }
+  }
+
+  /**
+   * Generate consistent color for user
+   */
+  private generateUserColor(userId: string): string {
+    const colors = [
+      '#EF4444', // red-500
+      '#F59E0B', // amber-500
+      '#10B981', // emerald-500
+      '#3B82F6', // blue-500
+      '#8B5CF6', // violet-500
+      '#EC4899', // pink-500
+      '#14B8A6', // teal-500
+      '#F97316', // orange-500
+    ];
+    
+    const hash = userId.split('').reduce((acc, char) => {
+      return char.charCodeAt(0) + ((acc << 5) - acc);
+    }, 0);
+    
+    return colors[Math.abs(hash) % colors.length];
+  }
+
+  /**
+   * Cleanup on module destroy
+   */
+  onModuleDestroy() {
+    if (this.idleCheckInterval) {
+      clearInterval(this.idleCheckInterval);
+    }
+    this.presenceService.cleanup();
   }
 }

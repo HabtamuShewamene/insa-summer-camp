@@ -1,12 +1,18 @@
 'use client';
 
+import { useState } from 'react';
 import { Document } from '@/lib/document.service';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Menu, Share2, Users } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { SavingIndicator } from './saving-indicator';
-import { useEffect, useState } from 'react';
+import { ConnectionStatus } from '@/components/collaboration/connection-status';
+import { ActiveCollaborators } from '@/components/collaboration/active-users';
+import { TypingIndicator } from '@/components/collaboration/typing-indicator';
+import { CollaboratorPanel } from '@/components/collaboration/collaborator-panel';
+import { Separator } from '@/components/ui/separator';
+import { useCollaboration } from '@/lib/collaboration-context';
 
 export function DocumentHeader({ 
   document, 
@@ -16,86 +22,96 @@ export function DocumentHeader({
   toggleSidebar: () => void;
 }) {
   const router = useRouter();
-  const [collabStatus, setCollabStatus] = useState('Connecting...');
+  const { activeUsers } = useCollaboration();
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<any[]>([]);
 
-  useEffect(() => {
-    const handleStatus = (e: any) => setCollabStatus(e.detail);
-    window.addEventListener('collab-status', handleStatus);
-    return () => window.removeEventListener('collab-status', handleStatus);
-  }, []);
+  // Map active users to collaborator format
+  const collaborators = activeUsers.map((user) => ({
+    id: user.id,
+    name: user.name,
+    email: '',
+    avatar: user.avatar,
+    color: user.color || '#6B7280',
+    status: 'online' as const,
+    lastActive: new Date(),
+    joinedAt: new Date(),
+  }));
 
   return (
-    <div className="h-14 border-b border-border bg-background flex items-center justify-between px-4 shrink-0">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={toggleSidebar}>
-          <Menu className="h-4 w-4" />
-        </Button>
-        <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard')} className="text-muted-foreground">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Dashboard
-        </Button>
-        
-        <div className="h-4 w-px bg-border mx-2" />
-        
-        <div className="flex flex-col justify-center">
-          <span className="font-semibold text-sm max-w-[200px] truncate">
-            {document.title}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {collabStatus}
-          </span>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-4">
-        <SavingIndicator />
-        
-        <div className="flex items-center gap-2">
-          {/* Active Users Avatars */}
-          <ActiveUsers />
-          
-          <Button variant="outline" size="sm" disabled>
-            <Share2 className="h-4 w-4 mr-2" />
-            Share
+    <>
+      <div className="h-14 border-b border-border bg-background flex items-center justify-between px-4 shrink-0">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <Button variant="ghost" size="icon" onClick={toggleSidebar}>
+            <Menu className="h-4 w-4" />
           </Button>
-          <Avatar className="h-8 w-8 ml-2">
-            <AvatarImage src="" />
-            <AvatarFallback>{document.owner?.name?.charAt(0) || 'U'}</AvatarFallback>
-          </Avatar>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => router.push('/dashboard')} 
+            className="text-muted-foreground"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Dashboard
+          </Button>
+          
+          <Separator orientation="vertical" className="h-4 mx-2" />
+          
+          <div className="flex flex-col justify-center min-w-0 flex-1">
+            <span className="font-semibold text-sm truncate">
+              {document.title}
+            </span>
+            <TypingIndicator typingUsers={typingUsers} />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <SavingIndicator />
+          
+          <Separator orientation="vertical" className="h-4" />
+          
+          <ConnectionStatus />
+          
+          <Separator orientation="vertical" className="h-4" />
+          
+          <ActiveCollaborators onOpenPanel={() => setIsPanelOpen(true)} />
+          
+          <Separator orientation="vertical" className="h-4" />
+          
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={() => setIsPanelOpen(!isPanelOpen)}
+              className="relative"
+            >
+              <Users className="h-4 w-4" />
+              {collaborators.length > 0 && (
+                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[10px] font-semibold text-primary-foreground flex items-center justify-center">
+                  {collaborators.length}
+                </span>
+              )}
+            </Button>
+            
+            <Button variant="outline" size="sm" disabled>
+              <Share2 className="h-4 w-4 mr-2" />
+              Share
+            </Button>
+            
+            <Avatar className="h-8 w-8 ml-2">
+              <AvatarImage src="" />
+              <AvatarFallback>{document.owner?.name?.charAt(0) || 'U'}</AvatarFallback>
+            </Avatar>
+          </div>
         </div>
       </div>
-    </div>
-  );
-}
 
-function ActiveUsers() {
-  const [users, setUsers] = useState<any[]>([]);
-
-  useEffect(() => {
-    // In a full implementation, we'd listen to the awareness state changes for this, 
-    // or from Socket.IO 'room-users'. Let's listen to 'room-users' from the provider wrapper.
-    const handleRoomUsers = (e: any) => setUsers(e.detail);
-    window.addEventListener('room-users', handleRoomUsers);
-    return () => window.removeEventListener('room-users', handleRoomUsers);
-  }, []);
-
-  if (users.length <= 1) return null; // Don't show if it's just me
-
-  return (
-    <div className="flex items-center mr-2">
-      <div className="flex -space-x-2 mr-2">
-        {users.slice(0, 3).map((u, i) => (
-          <Avatar key={i} className="h-7 w-7 border-2 border-background" style={{ borderColor: 'hsl(var(--background))' }}>
-            <AvatarImage src="" />
-            <AvatarFallback style={{ backgroundColor: u.color, color: '#fff' }} className="text-[10px]">
-              {u.name?.charAt(0) || 'U'}
-            </AvatarFallback>
-          </Avatar>
-        ))}
-      </div>
-      {users.length > 3 && (
-        <span className="text-xs text-muted-foreground font-medium">+{users.length - 3}</span>
-      )}
-    </div>
+      {/* Collaborator Panel */}
+      <CollaboratorPanel
+        collaborators={collaborators}
+        isOpen={isPanelOpen}
+        onClose={() => setIsPanelOpen(false)}
+      />
+    </>
   );
 }
