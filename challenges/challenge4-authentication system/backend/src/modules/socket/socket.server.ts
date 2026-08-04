@@ -328,6 +328,26 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.log(`Reply deleted broadcast to document ${documentId}`);
   }
 
+  broadcastVersionCreated(documentId: string, version: any): void {
+    this.server.to(documentId).emit('version-created', version);
+    this.logger.log(`Version created broadcast to document ${documentId}`);
+  }
+
+  broadcastVersionRestored(documentId: string, version: any): void {
+    this.server.to(documentId).emit('version-restored', version);
+    this.logger.log(`Version restored broadcast to document ${documentId}`);
+  }
+
+  broadcastDocumentRestored(documentId: string, payload: any): void {
+    this.server.to(documentId).emit('document-restored', payload);
+    this.logger.log(`Document restored broadcast to document ${documentId}`);
+  }
+
+  broadcastDocumentUpdate(documentId: string, update: number[]): void {
+    this.server.to(documentId).emit('document-update', update);
+    this.logger.log(`Document update broadcast to document ${documentId}`);
+  }
+
   /**
    * Broadcast current presence to all users in document
    */

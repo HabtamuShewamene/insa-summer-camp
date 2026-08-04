@@ -56,6 +56,7 @@ model User {
   comments       Comment[]
   commentReplies CommentReply[]
   commentReactions CommentReaction[]
+  documentVersions DocumentVersion[]
 
   @@map("users")
 }
@@ -181,6 +182,7 @@ model Document {
   owner    User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   content  DocumentContent?
   comments Comment[]
+  versions DocumentVersion[]
 
   @@index([ownerId])
   @@map("documents")
@@ -250,4 +252,24 @@ model CommentReaction {
   @@index([commentId])
   @@index([userId])
   @@map("comment_reactions")
+}
+
+model DocumentVersion {
+  id              String   @id @default(uuid())
+  documentId      String   @map("document_id")
+  versionNumber   Int      @map("version_number")
+  title           String
+  content         Json
+  createdById     String   @map("created_by_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  changeDescription String? @map("change_description")
+  isRestored      Boolean  @default(false) @map("is_restored")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdBy User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, versionNumber])
+  @@index([documentId, createdAt])
+  @@index([createdById])
+  @@map("document_versions")
 }

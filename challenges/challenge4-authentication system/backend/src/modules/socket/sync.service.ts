@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as Y from 'yjs';
+import { prosemirrorJSONToYDoc } from 'y-prosemirror';
 
 @Injectable()
 export class SyncService {
@@ -17,6 +18,15 @@ export class SyncService {
   applyUpdate(documentId: string, update: Uint8Array): void {
     const doc = this.getDoc(documentId);
     Y.applyUpdate(doc, update);
+  }
+
+  replaceDocument(documentId: string, content: any): void {
+    if (this.documents.has(documentId)) {
+      this.documents.get(documentId)?.destroy();
+    }
+
+    const restoredDoc = prosemirrorJSONToYDoc(content ?? { ops: [{ insert: '\n' }] });
+    this.documents.set(documentId, restoredDoc);
   }
 
   getStateVector(documentId: string): Uint8Array {

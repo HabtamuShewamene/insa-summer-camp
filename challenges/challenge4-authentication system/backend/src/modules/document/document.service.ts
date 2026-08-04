@@ -3,10 +3,14 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { RenameDocumentDto } from './dto/rename-document.dto';
 import { UpdateDocumentContentDto } from './dto/update-content.dto';
+import { VersionHistoryService } from '../version-history/version-history.service';
 
 @Injectable()
 export class DocumentService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly versionHistoryService: VersionHistoryService,
+  ) {}
 
   async create(userId: string, dto: CreateDocumentDto) {
     const document = await this.prisma.document.create({
@@ -85,6 +89,15 @@ export class DocumentService {
       }
     });
 
+    await this.versionHistoryService.createSnapshotIfChanged({
+      documentId: id,
+      userId,
+      title: updated.title,
+      content: (await this.prisma.documentContent.findUnique({ where: { documentId: id } }))?.content,
+      changeDescription: 'Renamed document',
+      force: true,
+    });
+
     return { document: updated, message: 'Document renamed successfully' };
   }
 
@@ -156,6 +169,14 @@ export class DocumentService {
         data: { updatedAt: new Date() },
       }),
     ]);
+
+    await this.versionHistoryService.createSnapshotIfChanged({
+      documentId: id,
+      userId,
+      title: document.title,
+      content: dto.content,
+      changeDescription: 'Auto-saved document changes',
+    });
 
     return { message: 'Document content saved' };
   }

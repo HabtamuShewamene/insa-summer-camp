@@ -97,6 +97,18 @@ export class SocketIOProvider {
     this.socket.on('reply-deleted', (payload: { replyId: string; commentId: string }) => {
       window.dispatchEvent(new CustomEvent('comment-reply-deleted', { detail: payload }));
     });
+
+    this.socket.on('version-created', (version: any) => {
+      window.dispatchEvent(new CustomEvent('version-created', { detail: version }));
+    });
+
+    this.socket.on('version-restored', (version: any) => {
+      window.dispatchEvent(new CustomEvent('version-restored', { detail: version }));
+    });
+
+    this.socket.on('document-restored', (payload: any) => {
+      window.dispatchEvent(new CustomEvent('document-restored', { detail: payload }));
+    });
   }
 
   destroy() {
@@ -111,6 +123,9 @@ export class SocketIOProvider {
     this.socket.off('comment-reopened');
     this.socket.off('comment-deleted');
     this.socket.off('reply-deleted');
+    this.socket.off('version-created');
+    this.socket.off('version-restored');
+    this.socket.off('document-restored');
     this.awareness.destroy();
   }
 }

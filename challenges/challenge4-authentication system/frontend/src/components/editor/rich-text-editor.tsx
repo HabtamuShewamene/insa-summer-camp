@@ -22,9 +22,17 @@ import { useAuth } from '@/lib/auth-context';
 import { Loader2 } from 'lucide-react';
 import { CommentPositionData } from '@/lib/comments.service';
 import { useDocumentComments } from '@/lib/use-document-comments';
-import { CommentSidebar } from '@/components/comments/CommentSidebar';
+import { DocumentSidebar } from './document-sidebar';
 
-export function RichTextEditor({ document }: { document: Document }) {
+export function RichTextEditor({
+  document,
+  sidebarTab,
+  onSidebarTabChange,
+}: {
+  document: Document;
+  sidebarTab: 'comments' | 'history';
+  onSidebarTabChange: (tab: 'comments' | 'history') => void;
+}) {
   const { user } = useAuth();
   const { status } = useCollaboration();
   const { ydoc, provider, isSynced, isCollaborating } = useDocumentCollaboration({
@@ -64,10 +72,10 @@ export function RichTextEditor({ document }: { document: Document }) {
     );
   }
 
-  return <EditorInstance document={document} provider={provider} ydoc={ydoc} user={user} />;
+  return <EditorInstance document={document} provider={provider} ydoc={ydoc} user={user} sidebarTab={sidebarTab} onSidebarTabChange={onSidebarTabChange} />;
 }
 
-function EditorInstance({ document, provider, ydoc, user }: any) {
+function EditorInstance({ document, provider, ydoc, user, sidebarTab, onSidebarTabChange }: any) {
   const { activeComments, resolvedComments, createComment, replyToComment, resolveComment, reopenComment, deleteComment, deleteReply } = useDocumentComments(document.id);
   // Activity tracking
   usePresenceTracking({
@@ -173,8 +181,11 @@ function EditorInstance({ document, provider, ydoc, user }: any) {
         </div>
       </div>
       <div className="hidden w-[380px] shrink-0 xl:block">
-        <CommentSidebar
+        <DocumentSidebar
+          documentId={document.id}
           documentTitle={document.title}
+          activeTab={sidebarTab}
+          onTabChange={onSidebarTabChange}
           activeComments={activeComments}
           resolvedComments={resolvedComments}
           selectedText={selectedText}

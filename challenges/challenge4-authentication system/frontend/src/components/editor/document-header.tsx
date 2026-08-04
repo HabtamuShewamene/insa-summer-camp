@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Document } from '@/lib/document.service';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Menu, Share2, Users } from 'lucide-react';
+import { ArrowLeft, History, Menu, Share2, Users } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { SavingIndicator } from './saving-indicator';
@@ -16,10 +16,12 @@ import { useCollaboration } from '@/lib/collaboration-context';
 
 export function DocumentHeader({ 
   document, 
-  toggleSidebar 
+  toggleSidebar,
+  onOpenHistory,
 }: { 
   document: Document; 
   toggleSidebar: () => void;
+  onOpenHistory: () => void;
 }) {
   const router = useRouter();
   const { activeUsers } = useCollaboration();
@@ -96,6 +98,11 @@ export function DocumentHeader({
             <Button variant="outline" size="sm" disabled>
               <Share2 className="h-4 w-4 mr-2" />
               Share
+            </Button>
+
+            <Button variant="outline" size="sm" onClick={onOpenHistory}>
+              <History className="h-4 w-4 mr-2" />
+              History
             </Button>
             
             <Avatar className="h-8 w-8 ml-2">
