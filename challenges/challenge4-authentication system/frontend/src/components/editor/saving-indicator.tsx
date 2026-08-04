@@ -2,6 +2,8 @@
 
 import { CheckCircle2, Loader2, XCircle } from 'lucide-react';
 
+import { useState, useEffect } from 'react';
+
 export function SavingIndicator() {
   // In a real app, this state would come from a context or Zustand store
   // For now, it will be controlled externally or we can expose a store.
@@ -10,9 +12,9 @@ export function SavingIndicator() {
   
   // This component needs to listen to a global "saveState" store.
   // We will build a simple custom event listener for now.
-  const [status, setStatus] = require('react').useState<'saved' | 'saving' | 'error'>('saved');
+  const [status, setStatus] = useState<'saved' | 'saving' | 'error'>('saved');
 
-  require('react').useEffect(() => {
+  useEffect(() => {
     const handleSaveStatus = (e: any) => setStatus(e.detail);
     window.addEventListener('save-status', handleSaveStatus);
     return () => window.removeEventListener('save-status', handleSaveStatus);
