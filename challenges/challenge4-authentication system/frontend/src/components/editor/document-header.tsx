@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Document } from '@/lib/document.service';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, History, Menu, Share2, Users, Lock, UserCheck } from 'lucide-react';
+import { ArrowLeft, History, Menu, Share2, Users, Lock, UserCheck, MessageSquare } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { SavingIndicator } from './saving-indicator';
@@ -17,16 +17,19 @@ import { ShareDialog } from '@/components/sharing/ShareDialog';
 import { PermissionBadge } from '@/components/sharing/PermissionBadge';
 import { PermissionLevel } from '@/lib/sharing.service';
 import { useAuth } from '@/lib/auth-context';
+import { useComments } from '@/hooks/use-comments';
 
 export function DocumentHeader({ 
   document, 
   toggleSidebar,
   onOpenHistory,
+  onToggleComments,
   userPermission = 'OWNER',
 }: { 
   document: Document; 
   toggleSidebar: () => void;
   onOpenHistory: () => void;
+  onToggleComments?: () => void;
   userPermission?: PermissionLevel;
 }) {
   const router = useRouter();
@@ -35,6 +38,10 @@ export function DocumentHeader({
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [typingUsers] = useState<any[]>([]);
+
+  // Get comment count
+  const { data: commentsData } = useComments(document.id, false);
+  const activeCommentCount = commentsData?.comments?.filter(c => c.status === 'ACTIVE').length || 0;
 
   const isOwner = userPermission === 'OWNER' || document.ownerId === user?.id;
   const permissionsCount = (document as any).permissions?.length || 0;
@@ -94,6 +101,21 @@ export function DocumentHeader({
           <Separator orientation="vertical" className="h-4" />
           
           <div className="flex items-center gap-2">
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={onToggleComments}
+              className="relative"
+              title="Comments"
+            >
+              <MessageSquare className="h-4 w-4" />
+              {activeCommentCount > 0 && (
+                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[10px] font-semibold text-primary-foreground flex items-center justify-center">
+                  {activeCommentCount}
+                </span>
+              )}
+            </Button>
+            
             <Button 
               variant="ghost" 
               size="icon"

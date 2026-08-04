@@ -68,6 +68,7 @@ export function EditorLayout({ document }: { document: Document }) {
           document={currentDocument} 
           toggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
           onOpenHistory={() => setRightSidebarTab('history')}
+          onToggleComments={() => setRightSidebarTab('comments')}
           userPermission={userPermission}
         />
         <div className="flex-1 overflow-y-auto">

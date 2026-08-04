@@ -2,9 +2,13 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { commentService, Comment, CommentReply, CreateCommentDto, CreateReplyDto } from '@/lib/comment.service';
+import { useCommentSocket } from './use-comment-socket';
 import { toast } from 'sonner';
 
 export function useComments(documentId: string, includeResolved = false) {
+  // Initialize Socket.IO for real-time updates
+  useCommentSocket(documentId);
+  
   return useQuery({
     queryKey: ['comments', documentId, includeResolved],
     queryFn: () => commentService.getComments(documentId, includeResolved),
@@ -186,5 +190,15 @@ export function useDeleteReply(documentId: string) {
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Failed to delete reply');
     },
+  });
+}
+
+// Convenience hooks with simplified APIs
+export function useReplyToComment(documentId: string) {
+  const addReplyMutation = useAddReply(documentId);
+  
+  return useMutation({
+    mutationFn: ({ commentId, content }: { commentId: string; content: string }) =>
+      addReplyMutation.mutateAsync({ commentId, dto: { content } }),
   });
 }
