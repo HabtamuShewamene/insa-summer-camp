@@ -5,16 +5,17 @@ import {
   Bold, Italic, Underline, Heading1, Heading2, Heading3, 
   List, ListOrdered, Quote, Code, Link as LinkIcon, 
   AlignLeft, AlignCenter, AlignRight, Minus, RemoveFormatting, 
-  Undo, Redo 
+  Undo, Redo, MessageSquarePlus 
 } from 'lucide-react';
 import { Toggle } from '@/components/ui/toggle';
 import { Button } from '@/components/ui/button';
 
 interface EditorToolbarProps {
   editor: Editor | null;
+  onAddComment?: () => void;
 }
 
-export function EditorToolbar({ editor }: EditorToolbarProps) {
+export function EditorToolbar({ editor, onAddComment }: EditorToolbarProps) {
   if (!editor) return null;
 
   return (
@@ -80,6 +81,9 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
       </div>
 
       <div className="flex items-center gap-1 px-2">
+        <Button variant="ghost" size="icon" onClick={onAddComment} title="Add Comment">
+          <MessageSquarePlus className="h-4 w-4" />
+        </Button>
         <Button variant="ghost" size="icon" onClick={() => {
           const url = window.prompt('URL');
           if (url) editor.chain().focus().setLink({ href: url }).run();

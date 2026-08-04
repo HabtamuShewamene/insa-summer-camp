@@ -64,6 +64,39 @@ export class SocketIOProvider {
     this.socket.on('room-users', (users: any[]) => {
       window.dispatchEvent(new CustomEvent('room-users', { detail: users }));
     });
+
+    this.socket.on('comment-created', (comment: any) => {
+      window.dispatchEvent(new CustomEvent('comment-created', { detail: comment }));
+      window.dispatchEvent(
+        new CustomEvent('comment-notification', {
+          detail: {
+            type: 'comment-created',
+            message: 'Someone commented on your document.',
+            comment,
+          },
+        }),
+      );
+    });
+
+    this.socket.on('reply-added', (reply: any) => {
+      window.dispatchEvent(new CustomEvent('comment-replied', { detail: reply }));
+    });
+
+    this.socket.on('comment-resolved', (comment: any) => {
+      window.dispatchEvent(new CustomEvent('comment-resolved', { detail: comment }));
+    });
+
+    this.socket.on('comment-reopened', (comment: any) => {
+      window.dispatchEvent(new CustomEvent('comment-reopened', { detail: comment }));
+    });
+
+    this.socket.on('comment-deleted', (payload: { commentId: string }) => {
+      window.dispatchEvent(new CustomEvent('comment-deleted', { detail: payload }));
+    });
+
+    this.socket.on('reply-deleted', (payload: { replyId: string; commentId: string }) => {
+      window.dispatchEvent(new CustomEvent('comment-reply-deleted', { detail: payload }));
+    });
   }
 
   destroy() {
@@ -72,6 +105,12 @@ export class SocketIOProvider {
     this.socket.off('sync-step-1');
     this.socket.off('awareness-update');
     this.socket.off('room-users');
+    this.socket.off('comment-created');
+    this.socket.off('reply-added');
+    this.socket.off('comment-resolved');
+    this.socket.off('comment-reopened');
+    this.socket.off('comment-deleted');
+    this.socket.off('reply-deleted');
     this.awareness.destroy();
   }
 }

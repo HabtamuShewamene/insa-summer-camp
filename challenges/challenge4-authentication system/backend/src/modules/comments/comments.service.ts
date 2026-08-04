@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { CreateReplyDto } from './dto/create-reply.dto';
@@ -50,7 +51,7 @@ export class CommentsService {
         userId,
         content: dto.content,
         selectedText: dto.selectedText,
-        positionData: dto.positionData,
+        positionData: dto.positionData as Prisma.InputJsonValue | undefined,
         status: CommentStatus.ACTIVE,
       },
       include: {
@@ -372,7 +373,13 @@ export class CommentsService {
       },
     });
 
-    return this.mapCommentToResponse(updated);
+    const response = this.mapCommentToResponse(updated);
+
+    if (this.socketServer) {
+      this.socketServer.broadcastCommentReopened(comment.documentId, response);
+    }
+
+    return response;
   }
 
   /**
@@ -427,6 +434,9 @@ export class CommentsService {
   async deleteReply(replyId: string, userId: string): Promise<void> {
     const reply = await this.prisma.commentReply.findUnique({
       where: { id: replyId },
+      include: {
+        comment: true,
+      },
     });
 
     if (!reply) {
@@ -440,6 +450,10 @@ export class CommentsService {
     await this.prisma.commentReply.delete({
       where: { id: replyId },
     });
+
+    if (this.socketServer) {
+      this.socketServer.broadcastReplyDeleted(reply.comment.documentId, replyId, reply.commentId);
+    }
   }
 
   /**

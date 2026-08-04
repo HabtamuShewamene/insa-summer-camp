@@ -28,8 +28,6 @@ export function EditorLayout({ document }: { document: Document }) {
         </div>
       </div>
 
-      {/* Right Sidebar - To be implemented in future for comments/sharing */}
-      {/* <div className="w-64 border-l border-border bg-secondary hidden lg:block"></div> */}
     </div>
   );
 }

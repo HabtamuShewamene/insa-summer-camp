@@ -59,7 +59,6 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
         id: user.id,
         name: user.name,
         email: user.email,
-        avatar: user.avatar,
       };
 
       this.logger.log(`Client connected: ${client.id} (User: ${user.name})`);
@@ -139,7 +138,6 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
         name: user.name,
         email: user.email,
         color: userColor,
-        avatar: user.avatar,
       },
     );
 

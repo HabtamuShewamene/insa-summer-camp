@@ -13,13 +13,16 @@ import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import { EditorToolbar } from './editor-toolbar';
 import { Document, documentService } from '@/lib/document.service';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { debounce } from 'lodash';
 import { useDocumentCollaboration } from '@/lib/use-document-collaboration';
 import { useCollaboration } from '@/lib/collaboration-context';
 import { usePresenceTracking } from '@/lib/use-presence-tracking';
 import { useAuth } from '@/lib/auth-context';
 import { Loader2 } from 'lucide-react';
+import { CommentPositionData } from '@/lib/comments.service';
+import { useDocumentComments } from '@/lib/use-document-comments';
+import { CommentSidebar } from '@/components/comments/CommentSidebar';
 
 export function RichTextEditor({ document }: { document: Document }) {
   const { user } = useAuth();
@@ -65,11 +68,16 @@ export function RichTextEditor({ document }: { document: Document }) {
 }
 
 function EditorInstance({ document, provider, ydoc, user }: any) {
+  const { activeComments, resolvedComments, createComment, replyToComment, resolveComment, reopenComment, deleteComment, deleteReply } = useDocumentComments(document.id);
   // Activity tracking
   usePresenceTracking({
     documentId: document.id,
     enabled: true,
   });
+
+  const [selectedText, setSelectedText] = useState<string | null>(null);
+  const [selectedRange, setSelectedRange] = useState<CommentPositionData | null>(null);
+  const [isCommentDraftOpen, setIsCommentDraftOpen] = useState(false);
 
   const debouncedSave = useRef(
     debounce(async (jsonContent: any) => {
@@ -125,6 +133,18 @@ function EditorInstance({ document, provider, ydoc, user }: any) {
       const json = editor.getJSON();
       debouncedSave(json);
     },
+    onSelectionUpdate: ({ editor }) => {
+      const { from, to } = editor.state.selection;
+      if (from === to) {
+        setSelectedText(null);
+        setSelectedRange(null);
+        setIsCommentDraftOpen(false);
+        return;
+      }
+
+      setSelectedText(editor.state.doc.textBetween(from, to, ' '));
+      setSelectedRange({ from, to });
+    },
   });
 
   useEffect(() => {
@@ -133,13 +153,60 @@ function EditorInstance({ document, provider, ydoc, user }: any) {
 
   if (!editor) return null;
 
+  const handleAddComment = async () => {
+    if (!selectedText || !selectedRange) {
+      return;
+    }
+
+    editor.chain().focus().setTextSelection(selectedRange).run();
+    setIsCommentDraftOpen(true);
+  };
+
   return (
-    <div className="flex flex-col h-full relative">
-      <EditorToolbar editor={editor} />
-      <div className="flex-1 overflow-y-auto bg-background">
-        <div className="max-w-4xl mx-auto w-full">
-          <EditorContent editor={editor} />
+    <div className="flex h-full min-h-0">
+      <div className="flex min-w-0 flex-1 flex-col relative">
+        <EditorToolbar editor={editor} onAddComment={handleAddComment} />
+        <div className="flex-1 overflow-y-auto bg-background">
+          <div className="max-w-4xl mx-auto w-full">
+            <EditorContent editor={editor} />
+          </div>
         </div>
+      </div>
+      <div className="hidden w-[380px] shrink-0 xl:block">
+        <CommentSidebar
+          documentTitle={document.title}
+          activeComments={activeComments}
+          resolvedComments={resolvedComments}
+          selectedText={selectedText}
+          selectedRange={selectedRange}
+          isComposerOpen={isCommentDraftOpen}
+          onOpenComposer={() => setIsCommentDraftOpen(true)}
+          onCancelComposer={() => setIsCommentDraftOpen(false)}
+          onCreateComment={async (content) => {
+            if (!selectedText || !selectedRange) {
+              return;
+            }
+
+            editor.chain().focus().setTextSelection(selectedRange).setHighlight({ color: 'rgba(0, 0, 0, 0.08)' }).run();
+            await createComment({ content, selectedText, positionData: selectedRange });
+            setIsCommentDraftOpen(false);
+          }}
+          onReply={async (commentId, content) => {
+            await replyToComment(commentId, { content });
+          }}
+          onResolve={async (commentId) => {
+            await resolveComment(commentId);
+          }}
+          onReopen={async (commentId) => {
+            await reopenComment(commentId);
+          }}
+          onDelete={async (commentId) => {
+            await deleteComment(commentId);
+          }}
+          onDeleteReply={async (commentId, replyId) => {
+            await deleteReply(commentId, replyId);
+          }}
+        />
       </div>
     </div>
   );
