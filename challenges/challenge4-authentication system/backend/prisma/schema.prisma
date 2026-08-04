@@ -30,6 +30,11 @@ enum LoginStatus {
   BLOCKED
 }
 
+enum CommentStatus {
+  ACTIVE
+  RESOLVED
+}
+
 model User {
   id            String       @id @default(uuid())
   name          String
@@ -48,6 +53,9 @@ model User {
   passwordResetTokens PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
   documents      Document[]
+  comments       Comment[]
+  commentReplies CommentReply[]
+  commentReactions CommentReaction[]
 
   @@map("users")
 }
@@ -170,8 +178,9 @@ model Document {
   isArchived   Boolean   @default(false) @map("is_archived")
   isDeleted    Boolean   @default(false) @map("is_deleted")
 
-  owner   User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  content DocumentContent?
+  owner    User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  content  DocumentContent?
+  comments Comment[]
 
   @@index([ownerId])
   @@map("documents")
@@ -187,4 +196,58 @@ model DocumentContent {
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@map("document_contents")
+}
+
+model Comment {
+  id           String        @id @default(uuid())
+  documentId   String        @map("document_id")
+  userId       String        @map("user_id")
+  content      String
+  selectedText String?       @map("selected_text")
+  positionData Json?         @map("position_data")
+  status       CommentStatus @default(ACTIVE)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  document  Document          @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replies   CommentReply[]
+  reactions CommentReaction[]
+
+  @@index([documentId])
+  @@index([userId])
+  @@index([status])
+  @@map("comments")
+}
+
+model CommentReply {
+  id        String   @id @default(uuid())
+  commentId String   @map("comment_id")
+  userId    String   @map("user_id")
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([commentId])
+  @@index([userId])
+  @@map("comment_replies")
+}
+
+model CommentReaction {
+  id        String   @id @default(uuid())
+  commentId String   @map("comment_id")
+  userId    String   @map("user_id")
+  emoji     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId, emoji])
+  @@index([commentId])
+  @@index([userId])
+  @@map("comment_reactions")
 }

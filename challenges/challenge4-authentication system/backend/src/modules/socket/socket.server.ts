@@ -271,6 +271,66 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   /**
+   * Comment-related Socket.IO events
+   */
+  
+  /**
+   * Broadcast comment created event to document room
+   */
+  broadcastCommentCreated(documentId: string, comment: any): void {
+    this.server.to(documentId).emit('comment-created', comment);
+    this.logger.log(`Comment created broadcast to document ${documentId}`);
+  }
+
+  /**
+   * Broadcast comment updated event to document room
+   */
+  broadcastCommentUpdated(documentId: string, comment: any): void {
+    this.server.to(documentId).emit('comment-updated', comment);
+    this.logger.log(`Comment updated broadcast to document ${documentId}`);
+  }
+
+  /**
+   * Broadcast comment deleted event to document room
+   */
+  broadcastCommentDeleted(documentId: string, commentId: string): void {
+    this.server.to(documentId).emit('comment-deleted', { commentId });
+    this.logger.log(`Comment deleted broadcast to document ${documentId}`);
+  }
+
+  /**
+   * Broadcast comment resolved event to document room
+   */
+  broadcastCommentResolved(documentId: string, comment: any): void {
+    this.server.to(documentId).emit('comment-resolved', comment);
+    this.logger.log(`Comment resolved broadcast to document ${documentId}`);
+  }
+
+  /**
+   * Broadcast comment reopened event to document room
+   */
+  broadcastCommentReopened(documentId: string, comment: any): void {
+    this.server.to(documentId).emit('comment-reopened', comment);
+    this.logger.log(`Comment reopened broadcast to document ${documentId}`);
+  }
+
+  /**
+   * Broadcast reply added event to document room
+   */
+  broadcastReplyAdded(documentId: string, reply: any): void {
+    this.server.to(documentId).emit('reply-added', reply);
+    this.logger.log(`Reply added broadcast to document ${documentId}`);
+  }
+
+  /**
+   * Broadcast reply deleted event to document room
+   */
+  broadcastReplyDeleted(documentId: string, replyId: string, commentId: string): void {
+    this.server.to(documentId).emit('reply-deleted', { replyId, commentId });
+    this.logger.log(`Reply deleted broadcast to document ${documentId}`);
+  }
+
+  /**
    * Broadcast current presence to all users in document
    */
   private broadcastPresence(documentId: string): void {

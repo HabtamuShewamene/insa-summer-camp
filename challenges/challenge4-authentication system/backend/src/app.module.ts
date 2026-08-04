@@ -9,6 +9,7 @@ import { SecurityModule } from './modules/security/security.module';
 import { MailModule } from './modules/mail/mail.module';
 import { DocumentModule } from './modules/document/document.module';
 import { SocketModule } from './modules/socket/socket.module';
+import { CommentsModule } from './modules/comments/comments.module';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
@@ -29,6 +30,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     MailModule,
     DocumentModule,
     SocketModule,
+    CommentsModule,
   ],
   providers: [
     {
