@@ -15,6 +15,12 @@ export class SocketIOProvider {
     this.doc = doc;
     this.awareness = new Awareness(this.doc);
 
+    // Guard: never emit with an invalid document ID
+    if (!documentId || documentId === 'undefined' || documentId.trim() === '') {
+      console.warn('[SocketIOProvider] Invalid documentId — skipping join');
+      return;
+    }
+
     // Set local awareness state
     this.awareness.setLocalStateField('user', {
       name: userOptions.name,
@@ -108,6 +114,11 @@ export class SocketIOProvider {
 
     this.socket.on('document-restored', (payload: any) => {
       window.dispatchEvent(new CustomEvent('document-restored', { detail: payload }));
+    });
+
+    // Load persisted content when server Yjs doc was empty (e.g. after restart)
+    this.socket.on('load-content', (payload: { content: any }) => {
+      window.dispatchEvent(new CustomEvent('load-db-content', { detail: payload.content }));
     });
   }
 

@@ -183,4 +183,65 @@ export class MailService {
         </div>`,
     });
   }
+
+  async sendDocumentInvitation(params: {
+    toEmail: string;
+    toName: string;
+    fromName: string;
+    documentTitle: string;
+    documentId: string;
+    permission: string;
+  }): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
+    const docLink = `${frontendUrl}/documents/${params.documentId}`;
+    const permLabel =
+      params.permission === 'VIEWER' ? 'view'
+      : params.permission === 'COMMENTER' ? 'view and comment on'
+      : 'edit';
+
+    await this.send({
+      to: params.toEmail,
+      subject: `${params.fromName} shared "${params.documentTitle}" with you — CollabDocs`,
+      text: [
+        `Hi ${params.toName},`,
+        '',
+        `${params.fromName} has invited you to ${permLabel} a document:`,
+        `"${params.documentTitle}"`,
+        '',
+        `Permission level: ${params.permission}`,
+        '',
+        `Open document: ${docLink}`,
+        '',
+        'If you were not expecting this invitation, you can ignore this email.',
+      ].join('\n'),
+      html: `
+        <div style="font-family:sans-serif;max-width:520px;margin:auto;padding:24px">
+          <h2 style="margin-bottom:4px">You have been invited to collaborate</h2>
+          <p style="color:#555;margin-top:0">
+            <strong>${params.fromName}</strong> has invited you to
+            <strong>${permLabel}</strong> a document on CollabDocs.
+          </p>
+          <div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:20px 0;background:#f9fafb">
+            <p style="margin:0 0 4px 0;font-size:18px;font-weight:600">
+              📄 ${params.documentTitle}
+            </p>
+            <p style="margin:0;font-size:12px;color:#6b7280">
+              Permission: <strong>${params.permission}</strong>
+            </p>
+          </div>
+          <p style="margin:24px 0">
+            <a href="${docLink}"
+               style="background:#000;color:#fff;padding:12px 28px;
+                      text-decoration:none;border-radius:6px;display:inline-block;
+                      font-weight:600;font-size:14px">
+              Open Document →
+            </a>
+          </p>
+          <p style="font-size:12px;color:#9ca3af">
+            If you were not expecting this invitation, you can safely ignore this email.
+          </p>
+        </div>`,
+    });
+  }
 }

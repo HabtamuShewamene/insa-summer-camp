@@ -22,13 +22,16 @@ export class SharingRepository {
   }
 
   async findUserByEmail(email: string) {
+    return this.prisma.user.findFirst({
+      where: { email: { equals: email.toLowerCase().trim(), mode: 'insensitive' } },
+      select: { id: true, name: true, email: true },
+    });
+  }
+
+  async findUserById(userId: string) {
     return this.prisma.user.findUnique({
-      where: { email },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-      },
+      where: { id: userId },
+      select: { id: true, name: true, email: true },
     });
   }
 

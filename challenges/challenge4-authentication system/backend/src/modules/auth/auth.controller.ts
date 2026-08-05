@@ -165,12 +165,15 @@ export class AuthController {
       const frontendUrl =
         this.configService.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
 
+      // Redirect to the server-side set-auth route which sets cookies
+      // before redirecting to dashboard — avoids cookie timing issues
       const params = new URLSearchParams({
         accessToken: result.accessToken,
         refreshToken: result.refreshToken,
+        redirect: '/dashboard',
       });
 
-      res.redirect(`${frontendUrl}/auth/callback?${params.toString()}`);
+      res.redirect(`${frontendUrl}/api/set-auth?${params.toString()}`);
     } catch (err) {
       console.error('Google OAuth Error:', err);
       const frontendUrl =

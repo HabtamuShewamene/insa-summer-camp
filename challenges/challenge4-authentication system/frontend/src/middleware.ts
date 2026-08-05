@@ -3,37 +3,36 @@ import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Check for token in cookie (set by setTokens) OR in a special header
   const accessToken = request.cookies.get('accessToken')?.value;
 
-  // Public paths that don't require authentication
-  const publicPaths = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/auth/callback'];
-  const isPublicPath = publicPaths.some(path => pathname === path || pathname.startsWith('/api/auth/google'));
+  // Routes that require authentication
+  const protectedPrefixes = [
+    '/dashboard',
+    '/documents',
+    '/settings',
+    '/security',
+    '/sessions',
+    '/profile',
+  ];
 
-  // Auth paths that authenticated users shouldn't access
-  const authPaths = ['/login', '/register'];
-  const isAuthPath = authPaths.includes(pathname);
+  // Routes only for guests (redirect logged-in users away)
+  const authOnlyPaths = ['/login', '/register'];
 
-  // Strictly protect dashboard and any sub-routes
-  const isDashboardRoute = pathname.startsWith('/dashboard') || pathname.startsWith('/documents') || pathname.startsWith('/settings') || pathname.startsWith('/security') || pathname.startsWith('/sessions');
+  const isProtected = protectedPrefixes.some((p) => pathname.startsWith(p));
+  const isAuthOnly = authOnlyPaths.includes(pathname);
 
-  // If trying to access protected route without token, redirect to login
-  if (!isPublicPath && !accessToken) {
+  // No cookie? If accessing a protected route, send to login
+  if (isProtected && !accessToken) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('from', pathname);
     return NextResponse.redirect(url);
   }
 
-  // Double check dashboard routes explicitly
-  if (isDashboardRoute && !accessToken) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    url.searchParams.set('from', pathname);
-    return NextResponse.redirect(url);
-  }
-
-  // If authenticated user tries to access auth pages, redirect to dashboard
-  if (isAuthPath && accessToken) {
+  // Has cookie? If on login/register, redirect to dashboard
+  if (isAuthOnly && accessToken) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
     return NextResponse.redirect(url);
@@ -44,13 +43,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder
-     */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

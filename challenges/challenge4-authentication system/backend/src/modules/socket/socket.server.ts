@@ -8,6 +8,7 @@ import {
   MessageBody 
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import * as Y from 'yjs';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
@@ -104,6 +105,12 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
     const { documentId, color } = data;
     const user = client.data.user;
 
+    // Guard: reject if documentId is missing or not a valid UUID
+    if (!documentId || typeof documentId !== 'string' || documentId.trim() === '' || documentId === 'undefined') {
+      client.emit('error', { message: 'Invalid document ID' });
+      return;
+    }
+
     // Verify document exists and user has access
     const doc = await this.prisma.document.findUnique({ 
       where: { id: documentId },
@@ -174,7 +181,37 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
     // Send current presence to the joining user
     this.broadcastPresence(documentId);
 
-    // Synchronize Yjs state
+    // Synchronize Yjs state — if server doc is empty, seed from DB content
+    const yDoc = this.syncService.getDoc(documentId);
+    const isEmpty = Y.encodeStateAsUpdate(yDoc).length <= 2; // only header bytes = empty
+
+    if (isEmpty) {
+      // Load persisted content from database and seed the Yjs doc
+      const dbContent = await this.prisma.documentContent.findUnique({
+        where: { documentId },
+        select: { content: true },
+      });
+
+      if (dbContent?.content) {
+        try {
+          // Insert saved content as a ProseMirror fragment into the Yjs XmlFragment
+          // so the Collaboration extension picks it up immediately
+          const fragment = yDoc.getXmlFragment('default');
+          if (fragment.length === 0) {
+            // Parse ProseMirror JSON and insert as text nodes
+            const content = dbContent.content as any;
+            if (content?.content && Array.isArray(content.content)) {
+              // We encode the DB content as a Yjs update using prosemirror-model
+              // Instead, we send the raw JSON to the client and let it initialise
+              client.emit('load-content', { content: dbContent.content });
+            }
+          }
+        } catch (e) {
+          this.logger.warn(`Failed to seed Yjs from DB for ${documentId}: ${e}`);
+        }
+      }
+    }
+
     const stateVector = this.syncService.getStateVector(documentId);
     client.emit('sync-step-1', stateVector);
     

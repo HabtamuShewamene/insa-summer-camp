@@ -70,7 +70,7 @@ export const setTokens = (accessToken: string | null, refreshToken: string | nul
     if (accessToken) {
       localStorage.setItem('accessToken', accessToken);
       // Also set as cookie for middleware
-      document.cookie = `accessToken=${accessToken}; path=/; max-age=${60 * 15}`; // 15 minutes
+      document.cookie = `accessToken=${accessToken}; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
     } else {
       localStorage.removeItem('accessToken');
       document.cookie = 'accessToken=; path=/; max-age=0'; // Clear cookie

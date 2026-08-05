@@ -136,6 +136,21 @@ function EditorInstance({
     }, 2000)
   ).current;
 
+  // Restore content from DB when server sends it (server Yjs was empty after restart)
+  useEffect(() => {
+    const handleLoadDbContent = (e: Event) => {
+      const content = (e as CustomEvent).detail;
+      if (!editor || !content) return;
+      // Only restore if editor is currently empty
+      const isEmpty = editor.state.doc.textContent.trim() === '';
+      if (isEmpty) {
+        editor.commands.setContent(content, false); // false = don't emit update
+      }
+    };
+    window.addEventListener('load-db-content', handleLoadDbContent);
+    return () => window.removeEventListener('load-db-content', handleLoadDbContent);
+  }, [editor]);
+
   const userColor = provider.awareness.getLocalState()?.user?.color ?? '#6366f1';
 
   const editor = useEditor({

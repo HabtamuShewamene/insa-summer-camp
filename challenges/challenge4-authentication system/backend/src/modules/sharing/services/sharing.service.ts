@@ -3,10 +3,14 @@ import { DocumentPermissionLevel } from '@prisma/client';
 import { SharingRepository } from '../repositories/sharing.repository';
 import { ShareDocumentDto } from '../dto/share-document.dto';
 import { UpdatePermissionDto } from '../dto/update-permission.dto';
+import { MailService } from '@/modules/mail/mail.service';
 
 @Injectable()
 export class SharingService {
-  constructor(private readonly repository: SharingRepository) {}
+  constructor(
+    private readonly repository: SharingRepository,
+    private readonly mailService: MailService,
+  ) {}
 
   private permissionRank(permission: DocumentPermissionLevel): number {
     return {
@@ -54,29 +58,34 @@ export class SharingService {
   }
 
   async shareDocument(documentId: string, userId: string, dto: ShareDocumentDto) {
-    // Check if user is owner
     const document = await this.repository.findDocumentById(documentId);
-    if (!document) {
-      throw new NotFoundException('Document not found');
-    }
+    if (!document) throw new NotFoundException('Document not found');
+    if (document.ownerId !== userId) throw new ForbiddenException('Only the owner can share this document');
 
-    if (document.ownerId !== userId) {
-      throw new ForbiddenException('Only the owner can share this document');
-    }
-
-    // Find user by email
-    const targetUser = await this.repository.findUserByEmail(dto.email);
+    // Case-insensitive email lookup
+    const targetUser = await this.repository.findUserByEmail(dto.email.toLowerCase().trim());
     if (!targetUser) {
-      throw new BadRequestException('User not found');
+      throw new BadRequestException(
+        'No account found with that email. The person must register first before you can share with them.',
+      );
+    }
+
+    // Prevent sharing with yourself
+    if (targetUser.id === userId) {
+      throw new BadRequestException('You cannot share a document with yourself');
     }
 
     // Check if already shared
     const existing = await this.repository.findUserPermission(documentId, targetUser.id);
     if (existing) {
-      throw new BadRequestException('Document already shared with this user');
+      // Update permission if it changed
+      if (existing.permission !== dto.permission) {
+        const updated = await this.repository.updatePermission(existing.id, dto.permission);
+        return { success: true, permission: updated, updated: true };
+      }
+      throw new BadRequestException('Document already shared with this user at this permission level');
     }
 
-    // Create permission
     const permission = await this.repository.createPermission(
       documentId,
       targetUser.id,
@@ -84,10 +93,26 @@ export class SharingService {
       userId,
     );
 
-    return {
-      success: true,
-      permission,
-    };
+    // Send invitation email (best-effort — don't fail the share if email fails)
+    try {
+      const [sharerUser, doc] = await Promise.all([
+        this.repository.findUserById(userId),
+        this.repository.findDocumentById(documentId),
+      ]);
+      await this.mailService.sendDocumentInvitation({
+        toEmail: targetUser.email,
+        toName: targetUser.name,
+        fromName: sharerUser?.name ?? 'A CollabDocs user',
+        documentTitle: doc?.title ?? 'Untitled Document',
+        documentId,
+        permission: dto.permission,
+      });
+    } catch (e) {
+      // Log but don't throw — sharing succeeded even if email fails
+      console.warn('[SharingService] Failed to send invitation email:', e);
+    }
+
+    return { success: true, permission, updated: false };
   }
 
   async getDocumentPermissions(documentId: string, userId: string) {
