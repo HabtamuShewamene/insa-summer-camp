@@ -405,10 +405,26 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.log(`Document restored broadcast to document ${documentId}`);
   }
 
-  broadcastDocumentShared(userId: string, payload: any): void {
+  async broadcastDocumentShared(userId: string, payload: any): Promise<void> {
+    const title = 'Document Shared';
+    const message = `You were given access to ${payload.documentTitle || 'a document'}.`;
+    const link = payload.documentId ? `/documents/${payload.documentId}` : undefined;
+    
+    // Persist to DB
+    await this.prisma.notification.create({
+      data: {
+        userId,
+        title,
+        message,
+        link,
+      },
+    });
+
     this.server.emit(`user-notification:${userId}`, {
       type: 'document-shared',
-      message: 'You were given access to a document.',
+      title,
+      message,
+      link,
       ...payload,
     });
     this.logger.log(`Document shared broadcast to user ${userId}`);
@@ -424,10 +440,23 @@ export class SocketServer implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.log(`Permission removed broadcast for document ${documentId}`);
   }
 
-  broadcastDocumentAccessRevoked(userId: string, payload: any): void {
+  async broadcastDocumentAccessRevoked(userId: string, payload: any): Promise<void> {
+    const title = 'Access Revoked';
+    const message = `Your access to ${payload.documentTitle || 'a document'} has been revoked.`;
+    
+    // Persist to DB
+    await this.prisma.notification.create({
+      data: {
+        userId,
+        title,
+        message,
+      },
+    });
+
     this.server.emit(`user-notification:${userId}`, {
       type: 'access-revoked',
-      message: 'Your access to a document has been revoked.',
+      title,
+      message,
       ...payload,
     });
     this.logger.log(`Document access revoked broadcast to user ${userId}`);
