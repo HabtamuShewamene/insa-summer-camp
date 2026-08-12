@@ -156,14 +156,13 @@ export function EnhancedRichTextEditor({
         return false;
       },
     },
-    onUpdate: ({ editor }) => {
+    onUpdate: ({ editor: tiptapEditor }) => {
       if (isEditable) {
-        const json = editor.getJSON();
-        debouncedSave(json);
+        debouncedSave(tiptapEditor.getJSON());
       }
     },
-    onSelectionUpdate: ({ editor }) => {
-      const { from, to } = editor.state.selection;
+    onSelectionUpdate: ({ editor: tiptapEditor }) => {
+      const { from, to } = tiptapEditor.state.selection;
       
       if (from === to) {
         // No selection
@@ -177,12 +176,12 @@ export function EnhancedRichTextEditor({
         return;
       }
 
-      const text = editor.state.doc.textBetween(from, to, ' ');
+      const text = tiptapEditor.state.doc.textBetween(from, to, ' ');
       setSelectedText(text);
       setSelectedRange({ from, to });
 
       // Calculate toolbar position
-      const { view } = editor;
+      const { view } = tiptapEditor;
       const start = view.coordsAtPos(from);
       const end = view.coordsAtPos(to);
       

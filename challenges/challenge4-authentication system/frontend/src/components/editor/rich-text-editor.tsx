@@ -171,20 +171,20 @@ function EditorInstance({
           'prose prose-sm sm:prose-base dark:prose-invert focus:outline-none max-w-none min-h-[500px] px-8 sm:px-12 md:px-24 py-12 md:py-16',
       },
     },
-    onUpdate: ({ editor }) => {
+    onUpdate: ({ editor: tiptapEditor }) => {
       if (isEditable) {
-        debouncedSave(editor.getJSON());
+        debouncedSave(tiptapEditor.getJSON());
       }
     },
-    onSelectionUpdate: ({ editor }) => {
-      const { from, to } = editor.state.selection;
+    onSelectionUpdate: ({ editor: tiptapEditor }) => {
+      const { from, to } = tiptapEditor.state.selection;
       if (from === to) {
         setSelectedText(null);
         setSelectedRange(null);
         setIsCommentDraftOpen(false);
         return;
       }
-      setSelectedText(editor.state.doc.textBetween(from, to, ' '));
+      setSelectedText(tiptapEditor.state.doc.textBetween(from, to, ' '));
       setSelectedRange({ from, to });
     },
   });
