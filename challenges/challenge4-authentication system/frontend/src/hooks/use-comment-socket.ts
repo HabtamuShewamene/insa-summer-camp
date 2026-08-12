@@ -6,32 +6,13 @@ import { Comment, CommentReply } from '@/lib/comment.service';
 import { useCollaboration } from '@/lib/collaboration-context';
 
 interface CommentSocketEvents {
-  'comment-created': {
-    comment: Comment;
-    documentId: string;
-  };
-  'comment-updated': {
-    comment: Comment;
-    documentId: string;
-  };
-  'comment-deleted': {
-    commentId: string;
-    documentId: string;
-  };
-  'comment-resolved': {
-    comment: Comment;
-    documentId: string;
-  };
-  'reply-added': {
-    reply: CommentReply;
-    commentId: string;
-    documentId: string;
-  };
-  'reply-deleted': {
-    replyId: string;
-    commentId: string;
-    documentId: string;
-  };
+  'comment-created': Comment;
+  'comment-updated': Comment;
+  'comment-deleted': { commentId: string };
+  'comment-resolved': Comment;
+  'comment-reopened': Comment;
+  'reply-added': CommentReply;
+  'reply-deleted': { replyId: string; commentId: string };
 }
 
 export function useCommentSocket(documentId: string) {
@@ -45,20 +26,20 @@ export function useCommentSocket(documentId: string) {
     socket.emit('join-document', { documentId });
 
     // Handle comment created
-    const handleCommentCreated = (data: CommentSocketEvents['comment-created']) => {
-      if (data.documentId !== documentId) return;
+    const handleCommentCreated = (comment: CommentSocketEvents['comment-created']) => {
+      if (comment.documentId !== documentId) return;
 
       // Update both active and resolved comments caches
       [false, true].forEach((includeResolved) => {
         queryClient.setQueryData(['comments', documentId, includeResolved], (old: any) => {
-          if (!old) return { comments: [data.comment], total: 1 };
+          if (!old) return { comments: [comment], total: 1 };
           
           // Check if comment already exists (prevent duplicates)
-          const exists = old.comments.some((c: Comment) => c.id === data.comment.id);
+          const exists = old.comments.some((c: Comment) => c.id === comment.id);
           if (exists) return old;
           
           return {
-            comments: [data.comment, ...old.comments],
+            comments: [comment, ...old.comments],
             total: old.total + 1,
           };
         });
@@ -66,8 +47,8 @@ export function useCommentSocket(documentId: string) {
     };
 
     // Handle comment updated
-    const handleCommentUpdated = (data: CommentSocketEvents['comment-updated']) => {
-      if (data.documentId !== documentId) return;
+    const handleCommentUpdated = (comment: CommentSocketEvents['comment-updated']) => {
+      if (comment.documentId !== documentId) return;
 
       [false, true].forEach((includeResolved) => {
         queryClient.setQueryData(['comments', documentId, includeResolved], (old: any) => {
@@ -75,8 +56,8 @@ export function useCommentSocket(documentId: string) {
           
           return {
             ...old,
-            comments: old.comments.map((comment: Comment) =>
-              comment.id === data.comment.id ? data.comment : comment
+            comments: old.comments.map((c: Comment) =>
+              c.id === comment.id ? comment : c
             ),
           };
         });
@@ -85,24 +66,22 @@ export function useCommentSocket(documentId: string) {
 
     // Handle comment deleted
     const handleCommentDeleted = (data: CommentSocketEvents['comment-deleted']) => {
-      if (data.documentId !== documentId) return;
-
       [false, true].forEach((includeResolved) => {
         queryClient.setQueryData(['comments', documentId, includeResolved], (old: any) => {
           if (!old) return old;
           
           return {
             ...old,
-            comments: old.comments.filter((comment: Comment) => comment.id !== data.commentId),
+            comments: old.comments.filter((c: Comment) => c.id !== data.commentId),
             total: Math.max(0, old.total - 1),
           };
         });
       });
     };
 
-    // Handle comment resolved
-    const handleCommentResolved = (data: CommentSocketEvents['comment-resolved']) => {
-      if (data.documentId !== documentId) return;
+    // Handle comment resolved / reopened
+    const handleCommentStatusChanged = (comment: Comment) => {
+      if (comment.documentId !== documentId) return;
 
       [false, true].forEach((includeResolved) => {
         queryClient.setQueryData(['comments', documentId, includeResolved], (old: any) => {
@@ -110,8 +89,8 @@ export function useCommentSocket(documentId: string) {
           
           return {
             ...old,
-            comments: old.comments.map((comment: Comment) =>
-              comment.id === data.comment.id ? data.comment : comment
+            comments: old.comments.map((c: Comment) =>
+              c.id === comment.id ? comment : c
             ),
           };
         });
@@ -119,22 +98,20 @@ export function useCommentSocket(documentId: string) {
     };
 
     // Handle reply added
-    const handleReplyAdded = (data: CommentSocketEvents['reply-added']) => {
-      if (data.documentId !== documentId) return;
-
+    const handleReplyAdded = (reply: CommentSocketEvents['reply-added']) => {
       [false, true].forEach((includeResolved) => {
         queryClient.setQueryData(['comments', documentId, includeResolved], (old: any) => {
           if (!old) return old;
           
           return {
             ...old,
-            comments: old.comments.map((comment: Comment) =>
-              comment.id === data.commentId
+            comments: old.comments.map((c: Comment) =>
+              c.id === reply.commentId
                 ? {
-                    ...comment,
-                    replies: [...comment.replies, data.reply],
+                    ...c,
+                    replies: [...c.replies, reply],
                   }
-                : comment
+                : c
             ),
           };
         });
@@ -143,21 +120,19 @@ export function useCommentSocket(documentId: string) {
 
     // Handle reply deleted
     const handleReplyDeleted = (data: CommentSocketEvents['reply-deleted']) => {
-      if (data.documentId !== documentId) return;
-
       [false, true].forEach((includeResolved) => {
         queryClient.setQueryData(['comments', documentId, includeResolved], (old: any) => {
           if (!old) return old;
           
           return {
             ...old,
-            comments: old.comments.map((comment: Comment) =>
-              comment.id === data.commentId
+            comments: old.comments.map((c: Comment) =>
+              c.id === data.commentId
                 ? {
-                    ...comment,
-                    replies: comment.replies.filter((reply) => reply.id !== data.replyId),
+                    ...c,
+                    replies: c.replies.filter((r) => r.id !== data.replyId),
                   }
-                : comment
+                : c
             ),
           };
         });
@@ -168,7 +143,8 @@ export function useCommentSocket(documentId: string) {
     socket.on('comment-created', handleCommentCreated);
     socket.on('comment-updated', handleCommentUpdated);
     socket.on('comment-deleted', handleCommentDeleted);
-    socket.on('comment-resolved', handleCommentResolved);
+    socket.on('comment-resolved', handleCommentStatusChanged);
+    socket.on('comment-reopened', handleCommentStatusChanged);
     socket.on('reply-added', handleReplyAdded);
     socket.on('reply-deleted', handleReplyDeleted);
 
@@ -177,7 +153,8 @@ export function useCommentSocket(documentId: string) {
       socket.off('comment-created', handleCommentCreated);
       socket.off('comment-updated', handleCommentUpdated);
       socket.off('comment-deleted', handleCommentDeleted);
-      socket.off('comment-resolved', handleCommentResolved);
+      socket.off('comment-resolved', handleCommentStatusChanged);
+      socket.off('comment-reopened', handleCommentStatusChanged);
       socket.off('reply-added', handleReplyAdded);
       socket.off('reply-deleted', handleReplyDeleted);
       

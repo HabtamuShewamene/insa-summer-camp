@@ -118,9 +118,9 @@ export default function SecurityPage() {
             <TabsTrigger value="sessions" className="gap-2">
               <Monitor className="h-4 w-4" />
               Active Sessions
-              {(dashboard?.sessions.length ?? 0) > 0 && (
+              {(dashboard?.sessions?.length ?? 0) > 0 && (
                 <Badge variant="secondary" className="ml-1">
-                  {dashboard?.sessions.length}
+                  {dashboard?.sessions?.length}
                 </Badge>
               )}
             </TabsTrigger>
@@ -131,18 +131,18 @@ export default function SecurityPage() {
             <TabsTrigger value="alerts" className="gap-2">
               <AlertTriangle className="h-4 w-4" />
               Security Alerts
-              {(dashboard?.securityEvents.filter((e) =>
+              {(dashboard?.securityEvents?.filter((e) =>
                 ['SUSPICIOUS_LOGIN', 'FAILED_LOGIN', 'ACCOUNT_LOCKED'].includes(
                   e.eventType,
                 ),
-              ).length ?? 0) > 0 && (
+              )?.length ?? 0) > 0 && (
                 <Badge variant="destructive" className="ml-1">
                   {
-                    dashboard?.securityEvents.filter((e) =>
+                    dashboard?.securityEvents?.filter((e) =>
                       ['SUSPICIOUS_LOGIN', 'FAILED_LOGIN', 'ACCOUNT_LOCKED'].includes(
                         e.eventType,
                       ),
-                    ).length
+                    )?.length
                   }
                 </Badge>
               )}
@@ -160,7 +160,7 @@ export default function SecurityPage() {
                       Devices currently signed into your account
                     </CardDescription>
                   </div>
-                  {(dashboard?.sessions.length ?? 0) > 1 && (
+                  {(dashboard?.sessions?.length ?? 0) > 1 && (
                     <Button
                       variant="destructive"
                       size="sm"
@@ -178,13 +178,13 @@ export default function SecurityPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                {(dashboard?.sessions.length ?? 0) === 0 ? (
+                {(dashboard?.sessions?.length ?? 0) === 0 ? (
                   <p className="text-muted-foreground text-center py-8">
                     No active sessions
                   </p>
                 ) : (
                   <div className="space-y-3">
-                    {dashboard?.sessions.map((session) => (
+                    {dashboard?.sessions?.map((session) => (
                       <div
                         key={session.id}
                         className="flex items-center justify-between p-4 rounded-lg border"
@@ -242,7 +242,7 @@ export default function SecurityPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {(dashboard?.loginHistory.length ?? 0) === 0 ? (
+                {(dashboard?.loginHistory?.length ?? 0) === 0 ? (
                   <p className="text-muted-foreground text-center py-8">
                     No login history yet
                   </p>
@@ -259,7 +259,7 @@ export default function SecurityPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {dashboard?.loginHistory.map((login) => (
+                        {dashboard?.loginHistory?.map((login) => (
                           <tr key={login.id} className="border-b last:border-0">
                             <td className="py-3 whitespace-nowrap">
                               {formatDate(login.createdAt)}
@@ -318,13 +318,13 @@ export default function SecurityPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {(dashboard?.securityEvents.length ?? 0) === 0 ? (
+                {(dashboard?.securityEvents?.length ?? 0) === 0 ? (
                   <p className="text-muted-foreground text-center py-8">
                     No security events recorded
                   </p>
                 ) : (
                   <div className="space-y-4">
-                    {dashboard?.securityEvents.map((event) => (
+                    {dashboard?.securityEvents?.map((event) => (
                       <div
                         key={event.id}
                         className="flex items-start justify-between p-4 rounded-lg border"
