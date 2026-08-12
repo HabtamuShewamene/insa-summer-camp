@@ -83,9 +83,9 @@ export function CollaboratorPanel({
             </div>
           ) : (
             <div className="space-y-3">
-              {collaborators.map((user) => (
+              {collaborators.map((user, index) => (
                 <div
-                  key={user.id}
+                  key={`${user.id}-${index}`}
                   className="flex items-start gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors"
                 >
                   <CollaboratorAvatar
