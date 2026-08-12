@@ -42,7 +42,7 @@ export function useCommentSocket(documentId: string) {
     if (!socket || !documentId) return;
 
     // Join the document's comment room
-    socket.emit('join-document', documentId);
+    socket.emit('join-document', { documentId });
 
     // Handle comment created
     const handleCommentCreated = (data: CommentSocketEvents['comment-created']) => {
@@ -182,7 +182,7 @@ export function useCommentSocket(documentId: string) {
       socket.off('reply-deleted', handleReplyDeleted);
       
       // Leave the document room
-      socket.emit('leave-document', documentId);
+      socket.emit('leave-document', { documentId });
     };
   }, [socket, documentId, queryClient]);
 }
