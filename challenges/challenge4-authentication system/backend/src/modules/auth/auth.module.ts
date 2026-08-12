@@ -10,6 +10,7 @@ import { GoogleStrategy } from './strategies/google.strategy';
 import { SecurityModule } from '@/modules/security/security.module';
 import { SessionsModule } from '@/modules/sessions/sessions.module';
 import { MailModule } from '@/modules/mail/mail.module';
+import { TwoFactorService } from './two-factor.service';
 
 @Module({
   imports: [
@@ -34,7 +35,8 @@ import { MailModule } from '@/modules/mail/mail.module';
     PasswordService,
     JwtStrategy,
     GoogleStrategy,
+    TwoFactorService,
   ],
-  exports: [AuthService, PasswordService],
+  exports: [AuthService, PasswordService, TwoFactorService],
 })
 export class AuthModule {}

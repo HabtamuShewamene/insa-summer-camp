@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as zxcvbn from 'zxcvbn';
 import * as crypto from 'crypto';
+
 import { PrismaService } from '@/prisma/prisma.service';
 import { PasswordService } from './password.service';
 import { SecurityService } from '@/modules/security/security.service';
@@ -18,6 +19,7 @@ import {
   RegisterDto,
   LoginDto,
   ChangePasswordDto,
+  UpdateProfileDto,
 } from './dto/auth.dto';
 import { GoogleProfile } from './strategies/google.strategy';
 import { AuthProvider, LoginStatus, SecurityEventType } from '@prisma/client';
@@ -29,6 +31,7 @@ import {
 } from '@/common/utils/device.util';
 import { AuthResponse, JwtPayload } from '@/common/interfaces';
 import { Request } from 'express';
+import { TwoFactorService } from './two-factor.service';
 
 @Injectable()
 export class AuthService {
@@ -41,6 +44,7 @@ export class AuthService {
     private bruteForceService: BruteForceService,
     private sessionsService: SessionsService,
     private mailService: MailService,
+    private twoFactorService: TwoFactorService,
   ) {}
 
   // Register new user
@@ -107,6 +111,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    if (!user.emailVerified) {
+      throw new UnauthorizedException('Please verify your email address before logging in');
+    }
+
     // Verify password
     const valid = await this.passwordService.verifyPassword(
       dto.password,
@@ -131,6 +139,64 @@ export class AuthService {
       true,
       user.id,
     );
+
+    if (user.isTwoFactorEnabled) {
+      // Generate a temporary token for the 2FA verification step
+      const tempToken = this.jwtService.sign(
+        { sub: user.id, email: user.email, is2faTemp: true },
+        {
+          secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
+          expiresIn: '5m',
+        },
+      );
+      
+      return {
+        requires2fa: true,
+        userId: user.id,
+        tempToken,
+      };
+    }
+
+    return this.createSessionAndTokens(user, req);
+  }
+
+  // 2FA login verification
+  async verify2FALogin(code: string, userId: string | undefined, req: Request) {
+    let targetUserId = userId;
+    
+    // If a tempToken was sent via Authorization header
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const tempToken = authHeader.split(' ')[1];
+      try {
+        const payload = this.jwtService.verify(tempToken, {
+          secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
+        });
+        if (payload.is2faTemp) {
+          targetUserId = payload.sub;
+        }
+      } catch (e) {
+        throw new UnauthorizedException('Invalid or expired 2FA token');
+      }
+    }
+
+    if (!targetUserId) {
+      throw new UnauthorizedException('User identification required for 2FA');
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!user || !user.twoFactorSecret) {
+      throw new UnauthorizedException('Invalid 2FA setup');
+    }
+
+    const isValid = require('otplib').authenticator.verify({
+      token: code,
+      secret: user.twoFactorSecret,
+    });
+
+    if (!isValid) {
+      throw new UnauthorizedException('Invalid 2FA code');
+    }
 
     return this.createSessionAndTokens(user, req);
   }
@@ -157,6 +223,14 @@ export class AuthService {
             googleId: profile.googleId,
             emailVerified: profile.emailVerified || user.emailVerified,
           },
+        });
+        
+        const { ipAddress } = extractDeviceInfo(req);
+        await this.securityService.createSecurityEvent({
+          userId: user.id,
+          eventType: SecurityEventType.GOOGLE_ACCOUNT_LINKED,
+          description: 'Linked Google account to existing profile',
+          ipAddress,
         });
       }
     } else {
@@ -246,6 +320,32 @@ export class AuthService {
     return user;
   }
 
+  // Update profile
+  async updateProfile(userId: string, name: string) {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { name },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        provider: true,
+        emailVerified: true,
+      }
+    });
+    return { message: 'Profile updated successfully', user };
+  }
+
+  // Delete account
+  async deleteAccount(userId: string) {
+    // Due to Cascade deletes in the schema, this will also delete 
+    // sessions, security events, documents, comments, etc.
+    await this.prisma.user.delete({
+      where: { id: userId },
+    });
+    return { message: 'Account deleted successfully' };
+  }
+
   // Change password
   async changePassword(userId: string, dto: ChangePasswordDto, req?: Request) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -274,12 +374,29 @@ export class AuthService {
     this.passwordService.validatePassword(dto.newPassword);
     const newHash = await this.passwordService.hashPassword(dto.newPassword);
 
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { passwordHash: newHash },
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash: newHash },
+      }),
+      this.prisma.session.updateMany({
+        where: { 
+          userId,
+          ...(req ? { id: { not: (req as any).user?.sessionId } } : {}) // Revoke all OTHER sessions
+        },
+        data: { revoked: true },
+      })
+    ]);
+
+    const { ipAddress } = req ? extractDeviceInfo(req) : { ipAddress: undefined };
+    await this.securityService.createSecurityEvent({
+      userId: user.id,
+      eventType: SecurityEventType.PASSWORD_CHANGED,
+      description: 'User changed their password',
+      ipAddress,
     });
 
-    return { message: 'Password changed successfully' };
+    return { message: 'Password changed successfully. Other sessions have been revoked.' };
   }
 
 
@@ -325,6 +442,13 @@ export class AuthService {
       where: { userId, ...(sessionId ? { id: { not: sessionId } } : {}) },
       data: { revoked: true },
     });
+    
+    await this.securityService.createSecurityEvent({
+      userId,
+      eventType: SecurityEventType.LOGOUT_ALL_DEVICES,
+      description: 'Revoked all other active sessions',
+    });
+    
     return { message: 'All other sessions revoked' };
   }
 

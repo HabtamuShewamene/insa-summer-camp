@@ -251,4 +251,38 @@ export const api = {
     const res = await apiClient.delete(`/documents/${id}`);
     return res.data;
   },
+
+  // 2FA
+  async verify2FALogin(data: { code: string, tempToken: string }) {
+    const res = await axios.post(`${API_URL}/auth/2fa/verify`, { code: data.code }, {
+      headers: { Authorization: `Bearer ${data.tempToken}` }
+    });
+    return res.data;
+  },
+
+  async generate2FA() {
+    const res = await apiClient.post('/auth/2fa/generate');
+    return res.data;
+  },
+
+  async enable2FA(code: string) {
+    const res = await apiClient.post('/auth/2fa/enable', { code });
+    return res.data;
+  },
+
+  async disable2FA(code: string) {
+    const res = await apiClient.post('/auth/2fa/disable', { code });
+    return res.data;
+  },
+
+  // Profile
+  async updateProfile(name: string) {
+    const res = await apiClient.patch('/auth/profile', { name });
+    return res.data;
+  },
+
+  async deleteAccount() {
+    const res = await apiClient.delete('/auth/account');
+    return res.data;
+  },
 };

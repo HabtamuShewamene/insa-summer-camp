@@ -23,6 +23,7 @@ interface AuthContextType {
   logoutAll: () => Promise<void>;
   /** Stores tokens and fetches the user — awaitable so callers can navigate after */
   setTokens: (accessToken: string, refreshToken: string) => Promise<void>;
+  verify2fa: (code: string, tempToken: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -72,8 +73,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Auth actions ──────────────────────────────────────────────────────────
-  const login = async (data: LoginData): Promise<void> => {
+  const login = async (data: LoginData): Promise<any> => {
     const result = await api.login(data);
+    if (result.requires2fa) {
+      return result;
+    }
+    setApiTokens(result.accessToken, result.refreshToken);
+    setUser(result.user);
+    return result;
+  };
+
+  const verify2fa = async (code: string, tempToken: string): Promise<void> => {
+    const result = await api.verify2FALogin({ code, tempToken });
     setApiTokens(result.accessToken, result.refreshToken);
     setUser(result.user);
   };
@@ -126,7 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isLoading, login, register, logout, logoutAll, setTokens }}
+      value={{ user, isLoading, login, register, logout, logoutAll, setTokens, verify2fa }}
     >
       {children}
     </AuthContext.Provider>

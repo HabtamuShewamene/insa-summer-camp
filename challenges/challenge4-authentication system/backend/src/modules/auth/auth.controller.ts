@@ -8,6 +8,8 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Delete,
+  Patch,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Request, Response } from 'express';
@@ -23,7 +25,11 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
   VerifyEmailDto,
+  VerifyTwoFactorDto,
+  EnableTwoFactorDto,
+  UpdateProfileDto,
 } from './dto/auth.dto';
+import { TwoFactorService } from './two-factor.service';
 import { Public } from '@/common/decorators/public.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { RequestUser } from '@/common/interfaces';
@@ -34,6 +40,7 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private configService: ConfigService,
+    private twoFactorService: TwoFactorService,
   ) {}
 
   // ─── Registration ─────────────────────────────────────────────────────────────
@@ -135,6 +142,57 @@ export class AuthController {
   @Throttle({ default: { limit: 60, ttl: 60000 } })
   checkPasswordStrength(@Body('password') password: string) {
     return this.authService.checkPasswordStrength(password ?? '');
+  }
+
+  // ─── Two-Factor Authentication ────────────────────────────────────────────────
+
+  @Post('2fa/generate')
+  @HttpCode(HttpStatus.OK)
+  async generate2FA(@CurrentUser() user: RequestUser) {
+    return this.twoFactorService.generateTwoFactorSecret(user.id);
+  }
+
+  @Post('2fa/enable')
+  @HttpCode(HttpStatus.OK)
+  async enable2FA(
+    @CurrentUser() user: RequestUser,
+    @Body() dto: EnableTwoFactorDto,
+  ) {
+    return this.twoFactorService.enableTwoFactor(user.id, dto.code);
+  }
+
+  @Post('2fa/disable')
+  @HttpCode(HttpStatus.OK)
+  async disable2FA(
+    @CurrentUser() user: RequestUser,
+    @Body() dto: EnableTwoFactorDto, // same structure
+  ) {
+    return this.twoFactorService.disableTwoFactor(user.id, dto.code);
+  }
+
+  @Public()
+  @Post('2fa/verify')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  async verify2FA(@Body() dto: VerifyTwoFactorDto, @Req() req: Request) {
+    return this.authService.verify2FALogin(dto.code, dto.userId, req);
+  }
+  
+  // ─── Profile Management ───────────────────────────────────────────────────────
+
+  @Patch('profile')
+  @HttpCode(HttpStatus.OK)
+  async updateProfile(
+    @CurrentUser() user: RequestUser,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    return this.authService.updateProfile(user.id, dto.name);
+  }
+
+  @Delete('account')
+  @HttpCode(HttpStatus.OK)
+  async deleteAccount(@CurrentUser() user: RequestUser) {
+    return this.authService.deleteAccount(user.id);
   }
 
   // ─── Google OAuth ─────────────────────────────────────────────────────────────

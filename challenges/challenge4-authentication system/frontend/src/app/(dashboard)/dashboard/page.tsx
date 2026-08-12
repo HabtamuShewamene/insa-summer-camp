@@ -94,6 +94,9 @@ function DocRow({
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => setIsMounted(true), []);
 
   const handleDelete = async () => {
     if (!confirm(`Delete "${doc.title || 'Untitled Document'}"?`)) return;
@@ -141,7 +144,7 @@ function DocRow({
               {doc.title || 'Untitled Document'}
             </p>
             <p className="text-xs text-muted-foreground">
-              Edited {formatDistanceToNow(new Date(doc.updatedAt), { addSuffix: true })}
+              {isMounted ? `Edited ${formatDistanceToNow(new Date(doc.updatedAt), { addSuffix: true })}` : 'Loading date...'}
             </p>
           </>
         )}
@@ -278,6 +281,11 @@ export default function DashboardPage() {
   const [sharedDocs, setSharedDocs] = useState<Doc[]>([]);
   const [recentDocs, setRecentDocs] = useState<Doc[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const loadDocuments = useCallback(async () => {
     if (!user) return;
@@ -353,12 +361,12 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">
-            {getGreeting(user.name?.split(' ')[0] || 'User')}
+            {isMounted ? getGreeting(user.name?.split(' ')[0] || 'User') : 'Welcome'}
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {new Date().toLocaleDateString('en-US', {
+            {isMounted ? new Date().toLocaleDateString('en-US', {
               weekday: 'long', month: 'long', day: 'numeric',
-            })}
+            }) : 'Loading date...'}
           </p>
         </div>
         <Button onClick={handleCreate} disabled={isCreating} size="sm" className="h-8 px-3">

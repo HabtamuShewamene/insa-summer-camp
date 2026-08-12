@@ -90,3 +90,26 @@ export class VerifyEmailDto {
   @IsNotEmpty()
   token!: string;
 }
+
+export class VerifyTwoFactorDto {
+  @IsString()
+  @IsNotEmpty()
+  code!: string;
+  
+  @IsString()
+  userId?: string; // Used when verifying during login (via tempToken)
+}
+
+export class EnableTwoFactorDto {
+  @IsString()
+  @IsNotEmpty()
+  code!: string;
+}
+
+export class UpdateProfileDto {
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(2)
+  @MaxLength(100)
+  name!: string;
+}

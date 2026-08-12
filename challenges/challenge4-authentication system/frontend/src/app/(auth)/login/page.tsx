@@ -30,12 +30,16 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 function LoginForm() {
-  const { login, user, isLoading } = useAuth();
+  const { login, user, isLoading, verify2fa } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLocked, setIsLocked] = useState(false);
+  const [requires2fa, setRequires2fa] = useState(false);
+  const [tempToken, setTempToken] = useState<string | null>(null);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [isVerifying2fa, setIsVerifying2fa] = useState(false);
 
   const {
     register,
@@ -70,8 +74,13 @@ function LoginForm() {
     try {
       setError(null);
       setIsLocked(false);
-      await login(data);
-      router.push('/dashboard');
+      const res = await login(data);
+      if (res?.requires2fa) {
+        setRequires2fa(true);
+        setTempToken(res.tempToken);
+      } else {
+        router.push('/dashboard');
+      }
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : 'Failed to login. Please try again.';
@@ -82,6 +91,21 @@ function LoginForm() {
         setIsLocked(true);
       }
       setError(msg);
+    }
+  };
+
+  const handle2FASubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tempToken) return;
+    try {
+      setError(null);
+      setIsVerifying2fa(true);
+      await verify2fa(twoFactorCode, tempToken);
+      router.push('/dashboard');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Invalid 2FA code');
+    } finally {
+      setIsVerifying2fa(false);
     }
   };
 
@@ -104,15 +128,64 @@ function LoginForm() {
       <Card className="border-muted shadow-lg rounded-2xl overflow-hidden">
         <CardHeader className="space-y-1 text-center pb-6">
           <CardTitle className="text-2xl font-bold tracking-tight">
-            Welcome back
+            {requires2fa ? 'Two-Factor Authentication' : 'Welcome back'}
           </CardTitle>
           <CardDescription>
-            Enter your credentials to access your account
+            {requires2fa 
+              ? 'Enter the 6-digit code from your authenticator app' 
+              : 'Enter your credentials to access your account'}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            {error && (
+          {requires2fa ? (
+            <form onSubmit={handle2FASubmit} className="space-y-4">
+              {error && (
+                <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md">
+                  {error}
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="twoFactorCode">Authentication Code</Label>
+                <Input
+                  id="twoFactorCode"
+                  value={twoFactorCode}
+                  onChange={(e) => setTwoFactorCode(e.target.value)}
+                  placeholder="123456"
+                  disabled={isVerifying2fa}
+                  maxLength={6}
+                  required
+                />
+              </div>
+              <Button
+                type="submit"
+                className="w-full font-medium"
+                disabled={isVerifying2fa || twoFactorCode.length < 6}
+              >
+                {isVerifying2fa ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  'Verify Code'
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={() => {
+                  setRequires2fa(false);
+                  setTwoFactorCode('');
+                  setError(null);
+                }}
+              >
+                Back to Login
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              {error && (
               <div
                 className={`text-sm p-3 rounded-md flex items-start gap-2 ${
                   isLocked
@@ -220,6 +293,7 @@ function LoginForm() {
               )}
             </Button>
           </form>
+          )}
 
           <div className="mt-6 flex items-center justify-center space-x-2">
             <div className="h-px bg-border flex-1" />
